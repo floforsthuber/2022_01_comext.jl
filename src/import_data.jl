@@ -10,80 +10,112 @@ dir_raw = "C:/Users/u0148308/data/raw/" # location of raw data
 
 url = "https://ec.europa.eu/eurostat/estat-navtree-portlet-prod/BulkDownloadListing?sort=1&file=comext%2FCOMEXT_DATA%2FPRODUCTS%2F"
 
-years = string.(2020:2020)
+years = string.(2015:2021)
 months = lpad.(1:12, 2, '0')
 
 for i in years
     for j in months
+        
         id = "full" * i * j * ".7z"
-        download(url * id, dir_raw * "comext/" * id)
+
+        if !isfile(dir_raw * "comext/zipped/" * id)
+            download(url * id, dir_raw * "comext/zipped/" * id)
+        else
+            println("The zipped file for $j/$i has already been downloaded.")
+        end
+
     end
 end
 
+# -----------
+# NEED TO MANUALLY UNZIPP to folder dir_raw!
 # trying to automate un-zipping, unfortunately failed
-
 # run(`cmd /c set PATH=%PATH% ';' "C:\\Program Files\\7-Zip\\" echo %PATH% 7z`)
 # run(`cmd /c cd "C:\\Users\\u0148308\\data\\raw\\"`)
 # run(`cmd /c 7z e a.7z`)
 
-path = dir_raw * "comext/" * "full202001.dat"
-df = CSV.read(path, DataFrame)
+# -----------
 
-describe(df)
+# initialize DataFrame
+# Notes:
+#   - column names and types need to correspond to the final output of the "inital_cleaning" function
+df = DataFrame(DECLARANT_ISO=String[], PARTNER_ISO=String[], TRADE_TYPE=String[], PRODUCT_NC=String[], FLOW=String[], PERIOD=Int64[],
+                VALUE_IN_EUROS=Union{Missing, Float64}[], QUANTITY_IN_KG=Union{Missing, Float64}[])
 
-glimpse = df[rand(1:size(df,1),100),:]
-transform!(glimpse, names(glimpse) .=> ByRow(string), renamecols=false)
+# function does the initial cleaning of the data               
+function initial_cleaning(path::String)
+    
+    df = CSV.read(path, DataFrame)
 
-XLSX.writetable(dir_raw * "comext/" * "glimpse" * ".xlsx", glimpse, overwrite=true)
+    # correct column types
+    # Notes:
+    #   - how to be treat PERIOD best, string or numeric? leave as Int64 for now
+    transform!(df, [:DECLARANT, :PARTNER] .=> ByRow(Int64), renamecols=false)
+    transform!(df, [:DECLARANT_ISO, :PARTNER_ISO, :TRADE_TYPE, :PRODUCT_NC, :PRODUCT_SITC, :PRODUCT_CPA2002, :PRODUCT_CPA2008, :PRODUCT_CPA2_1,
+                    :PRODUCT_BEC, :PRODUCT_BEC5, :PRODUCT_SECTION, :FLOW, :STAT_REGIME] .=> ByRow(string), renamecols=false)
+    transform!(df, [:VALUE_IN_EUROS, :QUANTITY_IN_KG, :SUP_QUANTITY] .=> ByRow(Float64), renamecols=false)
 
-# -------------------------------------------------------------------------------------------------------------------------------------------------------------
+    # rename some indicators
+    df[:, :TRADE_TYPE] .= ifelse.(df[:, :TRADE_TYPE] .== "I", "intra", "extra")
+    df[:, :FLOW] .= ifelse.(df[:, :FLOW] .== "1", "imports", "exports")
+    df[:, :SUPP_UNIT] .= ifelse.(ismissing.(df[:, :SUPP_UNIT]), missing, string.(df[:, :SUPP_UNIT])) # type still weird, should be Union{Missing, String}
 
-# General instructions for the Eurostat bulkdownload facility can be found here:
-# https://ec.europa.eu/eurostat/estat-navtree-portlet-prod/BulkDownloadListing?sort=1&file=comext%2FInstructions+on+how+to+use+the+bulkdownload+facility.pdf
+    # missing data
+    # Notes:
+    #   - if value or quanity is reported as 0 use missing instead
+    transform!(df, [:VALUE_IN_EUROS, :QUANTITY_IN_KG, :SUP_QUANTITY] .=> ByRow(x->ifelse(x == 0.0, missing, x)), renamecols=false)
 
-# Correspondance tables for product/country classifications can be found here:
-# https://ec.europa.eu/eurostat/estat-navtree-portlet-prod/BulkDownloadListing?sort=1&dir=comext%2FCOMEXT_METADATA%2FCLASSIFICATIONS_AND_RELATIONS%2FENGLISH
+    # aggregate over STAT_REGIME, SUPP_UNIT
+    # Notes:
+    #   - only lose few rows ~1%
+    #   - disregard SUPP_UNIT and SUP_QUANTITY for the time being
+    cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "TRADE_TYPE", "PRODUCT_NC", "FLOW", "PERIOD"]
+    gdf = groupby(df, cols_grouping)
+    df = combine(gdf, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] .=> sum, renamecols=false)
 
-# Original columns:
+    return df
+end
 
-# DECLARANT: reporting country, number code
-# DECLARANT_ISO: reporting country, ISO2 codes
-# PARTNER: partner country, number code
-# PARTNER_ISO: reporting country, ISO2 codes
+# # -----------
 
-# TRADE_TYPE: indicator for intra-EU (I) and extra-EU (E) TRADE_TYPE
+# years = string.(2019:2020)
+# months = lpad.(1:12, 2, '0')
 
-# PRODUCT_***: different product classifications, CN, SITC, CPA_2002, CPA_2008, CPA_2.1, BEC, SECTION are available
+# for i in years
+#     for j in months
+#         path = dir_raw * "comext/" * "full" * i * j * ".dat"
+#         append!(df, initial_cleaning(path))
+#     end
+# end
 
-# FLOW: indicator for import (1) or export (2)
-# STAT_REGIME: indicates the use of the import/export which requires different customts treatment, therefore, for a given product and country-pair 
-#              there might exist multiple entries (some more pre 2009):
-#              (1) normal imports/exports
-#              (2) inward processing: allows to import a good temporarily for processing and re-xporting whilst benefiting from duty exemptions
-#              (3) outward processing: allows to export a good temporarily for processing and re-importing whislt benefiting from duty exemptions
-#              (9) not recorded from customs declaration: imports/exports for which customs procedure is not the data source
+# # compute UNIT_PRICE
+# transform!(df, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] => ByRow((v,q) -> v/q) => :UNIT_PRICE)
 
-# SUPP_UNIT/ SUP_QUANTITY: for certain goods a supplementary quantity is provided in addition to net mass to provide more useful information
-#                          SUPP_UNIT indicates supplementary unit (1-6, A-Z), the exact correspondence can be found here: https://ec.europa.eu/eurostat/estat-navtree-portlet-prod/BulkDownloadListing?sort=1&file=comext%2FCOMEXT_METADATA%2FCLASSIFICATIONS_AND_RELATIONS%2FENGLISH%2FSU.txt
-#                          SUP_QUANTITY indicates quantity in the specified supplementary unit
+# # custom function since no predefined function
+# function pct_change(input::AbstractVector{<:Number})
+#     [i == 1 ? missing : (input[i]-input[i-1])/input[i-1]*100 for i in eachindex(input)]
+# end
 
-# PERIOD: time indicator in format YYYYMM
+# # -----------
 
-# VALUE_IN_EUROS: trade value expressed Euros. FOB valuation for exports and CIF valuation for imports.
-# QUANTITY_IN_KG: weight of goods in kilograms without packaging.
 
-# -------------------------------------------------------------------------------------------------------------------------------------------------------------
+path = dir_raw * "comext/" * "full" * "2020" * "01" * ".dat"
+append!(df, initial_cleaning(path))
+path = dir_raw * "comext/" * "full" * "2020" * "02" * ".dat"
+append!(df, initial_cleaning(path))
 
-# some thoughts:
+sort!(df)
 
-# which timespan? 
-#   2010-now would make reduce STAT_REGIME to only 1,2,3,9
-#   how to treat Croatia and UK? simply follow classification in TRADE_TYPE
+# compute UNIT_PRICE
+transform!(df, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] => ByRow((v,q) -> v/q) => :UNIT_PRICE)
 
-# which frequency?
-#   monthly/annually (with annual data less precise how to treat HR and UK)
+# custom function since no predefined function
+function pct_change(input::AbstractVector)
+    [i == 1 ? missing : (input[i]-input[i-1])/input[i-1]*100 for i in eachindex(input)]
+end
 
-# how to deal with STAT_REGIME?
-#   issue of double counting? can we extract value added?
 
-# what exactly do we want to compute?
+
+cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "TRADE_TYPE", "PRODUCT_NC", "FLOW"]
+gdf = groupby(df, cols_grouping)
+df = transform(gdf, :UNIT_PRICE => pct_change => :UNIT_PRICE_CHANGE)

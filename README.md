@@ -37,15 +37,3 @@ Correspondance tables for product/country classifications can be found [here](ht
 - **VALUE_IN_EUROS:** trade value expressed Euros. FOB valuation for exports and CIF valuation for imports.
 - **QUANTITY_IN_KG:** weight of goods in kilograms without packaging.
 
-
-## Thoughts:
-
-- which timespan? 
-    - 2010-now would make reduce STAT_REGIME to only 1,2,3,9
-    - how to treat Croatia and UK? simply follow classification in TRADE_TYPE
-
-- which frequency?
-    - monthly/annually (with annual data less precise how to treat HR and UK)
-
-- how to deal with STAT_REGIME?
-    - issue of double counting? can we extract value added?
