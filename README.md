@@ -9,6 +9,7 @@ General instructions for the Eurostat bulkdownload facility can be found [here](
 
 Correspondance tables for product/country classifications can be found [here](https://ec.europa.eu/eurostat/estat-navtree-portlet-prod/BulkDownloadListing?sort=1&dir=comext%2FCOMEXT_METADATA%2FCLASSIFICATIONS_AND_RELATIONS%2FENGLISH)
 
+Product code updates of CN8 classification can be found [here](https://ec.europa.eu/eurostat/ramon/nomenclatures/index.cfm?TargetUrl=LST_CLS_DLD&StrNom=CN_2021&StrLanguageCode=EN&StrLayoutCode=HIERARCHIC)
 
 ## Original columns:
 
