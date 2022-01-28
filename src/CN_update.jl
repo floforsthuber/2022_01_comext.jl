@@ -1,10 +1,11 @@
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
-# Script with functions to import and transform raw data
+# Script for CN classification update
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 using DataFrames, CSV, XLSX, LinearAlgebra, Statistics
 
 dir_io = "C:/Users/u0148308/data/comext/" # location of input/output (io)
+
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 # Download CN8 code updates from RAMON
@@ -27,6 +28,7 @@ transform!(df, :Period => ByRow(x -> x[1:4]) => :PERIOD_START, :Period => ByRow(
 transform!(df, ["Origin code", "Destination code"] .=> ByRow(x -> replace(x, " " => "")) .=> [:ORIG_CODE, :DEST_CODE]) # remove whitespace
 df = df[:, [:PERIOD_START, :PERIOD_END, :ORIG_CODE, :DEST_CODE]] # subset to clean columns
 
+CSV.write(dir_io * "clean/" * "CN_update.csv", df)
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 # Gather product codes for which have been changes in sample (2015-2021)
@@ -36,3 +38,6 @@ df = df[:, [:PERIOD_START, :PERIOD_END, :ORIG_CODE, :DEST_CODE]] # subset to cle
 #   - need product codes which have been introduced or discontinued during timespan 2015-2021
 years = string.(2015:2021)
 subset!(df, :PERIOD_START => ByRow(x -> x in years)) # subset for our timespan
+
+
+
