@@ -9,12 +9,38 @@ dir_io = "C:/Users/u0148308/data/comext/" # location of input/output (io)
 
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
-# Download CN8 codes from RAMON
+# Download CN structure updates from RAMON
+# for 2021: https://ec.europa.eu/eurostat/ramon/nomenclatures/index.cfm?TargetUrl=LST_CLS_DLD&StrNom=CN_2021&StrLanguageCode=EN&StrLayoutCode=HIERARCHIC
+# for 2022: https://ec.europa.eu/eurostat/ramon/nomenclatures/index.cfm?TargetUrl=LST_CLS_DLD&StrNom=CN_2022&StrLanguageCode=EN&StrLayoutCode=HIERARCHIC
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# manually
+
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Import data into Julia and do cleaning
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+path = dir_io * "raw/correspondence/CN/" * "CN_2022_UPDATE_SINCE_1988" * ".xlsx"
+df = DataFrame(XLSX.readtable(path, "relatnc1988_2022")...)
+
+# formatting
+transform!(df, names(df) .=> ByRow(string), renamecols=false)
+transform!(df, :Period => ByRow(x -> x[1:4]) => :PERIOD_START, :Period => ByRow(x -> x[end-3:end]) => :PERIOD_END) # seperate column
+transform!(df, ["Origin code", "Destination code"] .=> ByRow(x -> replace(x, " " => "")) .=> [:ORIG_CODE, :DEST_CODE]) # remove whitespace
+df = df[:, [:PERIOD_START, :PERIOD_END, :ORIG_CODE, :DEST_CODE]] # subset to clean columns
+
+# data export
+CSV.write(dir_io * "clean/" * "CN_update.csv", df)
+
+
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Download yearly CN structure from RAMON
 #   - needs to be done manually from:
 #       https://ec.europa.eu/eurostat/ramon/nomenclatures/index.cfm?TargetUrl=LST_NOM&StrGroupCode=CLASSIFIC&StrLanguageCode=EN
 #   - manually converted the .xls files from 2007-2013 to .csv
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+# manually
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 # Import raw data into Julia and do initial cleaning
