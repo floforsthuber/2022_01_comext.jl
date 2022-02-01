@@ -185,7 +185,7 @@ table_CN_changes = DataFrame(year=String[], products=Int64[], unchanged=Int64[],
 
 for i in string.(2000:2022)
 
-    df = initial_cleaning(i) # actually only provides total number of observations
+    df = initial_cleaning(i) # actually only needed for the total number of observations
     n_update_classification = CN_update_classification(i) # classifies the changes
 
     # compute some more numbers for the table
