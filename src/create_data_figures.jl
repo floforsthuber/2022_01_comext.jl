@@ -12,16 +12,8 @@ dir_io = "C:/Users/u0148308/data/comext/" # location of input/output (io)
 #   - import raw data, initial cleaning
 #   - subset and compute data for figure
 #   - loop over months and add to DataFrame
-#   - plot figure
-
-
-# Notes:
-#   - figure 1: evolution of total imports/exports from BE to UK vis-a-vis FR, NL, DE and EU
-#   - figure 2: evolution of imports/exports from BE to UK at 2digit level
-#   - figure 3: evolution of share of imports/exports from BE to UK of total imports/exports from BE
-#   - all figures in values and unit values (unit prices):
-#       + compute a price index as using a weighted sum
-#   - include vertical lines for different Brexit events
+#   - export data
+#   - import data and plot figures (different script)
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
