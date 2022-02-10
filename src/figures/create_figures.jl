@@ -193,7 +193,7 @@ for flow in ["imports", "exports"]
     savefig(p, dir_io * "clean/images/fig3/" * "fig3_" * flow * "_value_share" * ".png") # export image
     savefig(p, dir_dropbox * "results/images/fig3/" * "fig3_" * flow * "_value_share" * ".png") # export image
 
-    # value share
+    # quantity share
     p = @df subset(df, :FLOW => ByRow(x -> x == flow)) plot(:DATE, :QUANTITY_SHARE,
         group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="kg", title="Belgian "*flow)
     vline!([Date(2016,6,23)], label="refer", color=:black, lw=2) # refer
