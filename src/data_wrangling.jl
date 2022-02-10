@@ -32,10 +32,18 @@ function initial_cleaning(year::String, month::String)
     transform!(df, [:DECLARANT, :PARTNER, :PERIOD] .=> ByRow(Int64), renamecols=false)
 
     # additional PRODUCT_BEC5 column from 2017 onwards
-    if year in ["2015", "2016"] # why does shorthand not work?
+    if year in string.(2001:2016) # why does shorthand not work?
         df.PRODUCT_BEC5 .= missing
     else
     end
+
+    # column names different: PRODUCT_cpa2002, PRODUCT_cpa2008
+    if year in string.(2001:2001)
+        rename!(df, :PRODUCT_cpa2002 => :PRODUCT_CPA2002, :PRODUCT_cpa2008 => :PRODUCT_CPA2008)
+    elseif year in string.(2002:2007)
+        rename!(df, :PRODUCT_cpa2008 => :PRODUCT_CPA2008)
+    end
+
     cols_string = ["DECLARANT_ISO", "PARTNER_ISO", "TRADE_TYPE", "PRODUCT_NC", "PRODUCT_SITC", "PRODUCT_CPA2002", "PRODUCT_CPA2008", "PRODUCT_CPA2_1",
                    "PRODUCT_BEC", "PRODUCT_BEC5", "PRODUCT_SECTION", "FLOW", "STAT_REGIME"]
     transform!(df,  cols_string .=> ByRow(string), renamecols=false)
@@ -67,7 +75,7 @@ end
 # -----------
 
 # for now just use 3 months otherwise Julia crashes since ~30GB of data
-append!(df, initial_cleaning("2020", "01"))
+append!(df, initial_cleaning("2001", "01"))
 append!(df, initial_cleaning("2020", "02"))
 append!(df, initial_cleaning("2020", "03"))
 

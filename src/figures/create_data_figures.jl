@@ -30,10 +30,18 @@ function initial_cleaning(year::String, month::String)
     transform!(df, [:DECLARANT, :PARTNER, :PERIOD] .=> ByRow(Int64), renamecols=false)
 
     # additional PRODUCT_BEC5 column from 2017 onwards
-    if year in ["2015", "2016"] # why does shorthand not work?
+    if year in string.(2001:2016) # why does shorthand not work?
         df.PRODUCT_BEC5 .= missing
     else
     end
+
+    # column names different: PRODUCT_cpa2002, PRODUCT_cpa2008
+    if year in string.(2001:2001)
+        rename!(df, :PRODUCT_cpa2002 => :PRODUCT_CPA2002, :PRODUCT_cpa2008 => :PRODUCT_CPA2008)
+    elseif year in string.(2002:2007)
+        rename!(df, :PRODUCT_cpa2008 => :PRODUCT_CPA2008)
+    end
+
     cols_string = ["DECLARANT_ISO", "PARTNER_ISO", "TRADE_TYPE", "PRODUCT_NC", "PRODUCT_SITC", "PRODUCT_CPA2002", "PRODUCT_CPA2008", "PRODUCT_CPA2_1",
                    "PRODUCT_BEC", "PRODUCT_BEC5", "PRODUCT_SECTION", "FLOW", "STAT_REGIME"]
     transform!(df,  cols_string .=> ByRow(string), renamecols=false)
@@ -90,7 +98,7 @@ function data_fig1(df::DataFrame, declarants::Vector{String}, partners::Vector{S
     df = subset(df, :DECLARANT_ISO => ByRow(x -> x in declarants), :PARTNER_ISO => ByRow(x -> x in partners))
     subset!(df, :PRODUCT_NC => ByRow(x -> x != "TOTAL")) # take out total
     subset!(df, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] .=> ByRow(x -> !ismissing(x))) # take out missing values
-    subset!(df, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] .=> ByRow(x -> x != 0)) # take out 0 (there are some introduce by adding EU)
+    subset!(df, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] .=> ByRow(x -> x != 0)) # take out 0 (there are some introduced by adding EU)
 
     # compute UNIT_PRICE
     transform!(df, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] => ByRow((v,q) -> v/q) => :UNIT_PRICE)
@@ -161,7 +169,7 @@ function data_fig3(df::DataFrame, declarants::Vector{String}, partners::Vector{S
     df_total = combine(gdf, :VALUE_IN_EUROS => sum => :VALUE_TOTAL, :QUANTITY_IN_KG => sum => :QUANTITY_TOTAL)
 
     # compute total exports/imports for each partner
-    df_total_partner = subset(df, :DECLARANT_ISO => ByRow(x -> x in ["BE"]), :PARTNER_ISO => ByRow(x -> x in ["GB"]))
+    df_total_partner = subset(df, :DECLARANT_ISO => ByRow(x -> x in declarants), :PARTNER_ISO => ByRow(x -> x in partners))
     cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW", "PERIOD"]
     gdf = groupby(df_total_partner, cols_grouping)
     df_total_partner = combine(gdf, :VALUE_IN_EUROS => sum => :VALUE_TOTAL_PARTNER, :QUANTITY_IN_KG => sum => :QUANTITY_TOTAL_PARTNER)
@@ -186,7 +194,7 @@ years = string.(2015:2021)
 months = lpad.(1:12, 2, '0')
 
 # EU27
-ctrys_EU = ["AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GR", "HR", "HU",
+ctrys_EU27 = ["AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GR", "HR", "HU",
              "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL", "PT", "RO", "SE", "SI", "SK"]
 
 # initialize dataframes
@@ -207,12 +215,12 @@ for i in years
         df = initial_cleaning(i, j)
 
         # create EU as partner
-        df = append_EU(df, ctrys_EU)
+        df = append_EU(df, ctrys_EU27)
 
         # append data for figures
         append!(df_fig1, data_fig1(df, ["BE"], ["GB", "EU", "DE", "FR", "NL"]))
         append!(df_fig2, data_fig2(df, ["BE"], ["GB"], 2))
-        append!(df_fig3, data_fig3(df, ["BE"], ["GB"]))
+        append!(df_fig3, data_fig3(df, ["BE"], ["GB", "EU", "DE", "FR", "NL"]))
 
         println(" ✓ Data for figure 1, 2 and 3 has been successfully added for $j/$i. \n")
     end
@@ -222,3 +230,61 @@ end
 CSV.write(dir_io * "clean/" * "df_fig1" * ".csv", df_fig1)
 CSV.write(dir_io * "clean/" * "df_fig2" * ".csv", df_fig2)
 CSV.write(dir_io * "clean/" * "df_fig3" * ".csv", df_fig3)
+
+
+
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+function tab1(df::DataFrame, declarants::Vector{String}, partners::Vector{String}, digits::Int64)
+
+    # clean df
+    subset!(df, :PRODUCT_NC => ByRow(x -> x != "TOTAL")) # take out TOTAL
+    subset!(df, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] .=> ByRow(x -> !ismissing(x))) # take out missing values
+
+    # add 2 digit CN classification
+    # Notes:
+    #   - is simply the first digits
+    g(x) = x[1:digits]
+    df.PRODUCT_NC_digits = g.(df.PRODUCT_NC)
+
+    # add year identifier
+    h(x) = x[1:4]
+    df.YEAR = h.(string.(df.PERIOD))
+
+    # compute total exports/imports
+    cols_grouping = ["DECLARANT_ISO", "FLOW", "YEAR"]
+    gdf = groupby(df, cols_grouping)
+    df_total = combine(gdf, :VALUE_IN_EUROS => sum => :VALUE_TOTAL, :QUANTITY_IN_KG => sum => :QUANTITY_TOTAL)
+
+    # compute total exports/imports per partner
+    df_partner = subset(df, :DECLARANT_ISO => ByRow(x -> x in declarants), :PARTNER_ISO => ByRow(x -> x in partners))
+
+    cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW", "YEAR"]
+    gdf = groupby(df_partner, cols_grouping)
+    df_total_partner = combine(gdf, :VALUE_IN_EUROS => sum => :VALUE_TOTAL_PARTNER, :QUANTITY_IN_KG => sum => :QUANTITY_TOTAL_PARTNER)
+    
+    # compute total exports/imports for each partner and product
+    cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW", "YEAR", "PRODUCT_NC_digits"]
+    gdf = groupby(df_partner, cols_grouping)
+    df_partner_product = combine(gdf, :VALUE_IN_EUROS => sum, :QUANTITY_IN_KG => sum, renamecols=false)
+    
+    # compute export/import shares per partner
+    # Notes:
+    #   - shares are in percentages
+    df_join = leftjoin(df_partner_product, df_total_partner, on=["DECLARANT_ISO", "PARTNER_ISO", "FLOW", "YEAR"])
+    transform!(df_join, [:VALUE_IN_EUROS, :VALUE_TOTAL_PARTNER] => ByRow((v,s) -> v/s*100) => :VALUE_SHARE_PARTNER)
+    transform!(df_join, [:QUANTITY_IN_KG, :QUANTITY_TOTAL_PARTNER] => ByRow((v,s) -> v/s*100) => :QUANTITY_SHARE_PARTNER)
+
+    # compute export/import shares of total
+    df = leftjoin(df_join, df_total, on=["DECLARANT_ISO", "FLOW", "YEAR"])
+    transform!(df, [:VALUE_IN_EUROS, :VALUE_TOTAL] => ByRow((v,s) -> v/s*100) => :VALUE_SHARE_TOTAL)
+    transform!(df, [:QUANTITY_IN_KG, :QUANTITY_TOTAL] => ByRow((v,s) -> v/s*100) => :QUANTITY_SHARE_TOTAL)
+    
+    # remove columns with values, keep only shares
+    cols_remove = ["VALUE_IN_EUROS", "VALUE_TOTAL", "VALUE_TOTAL_PARTNER", "QUANTITY_IN_KG", "QUANTITY_TOTAL", "QUANTITY_TOTAL_PARTNER"]
+    df = df[:, Not(cols_remove)]
+
+    return df
+end
+
+a = tab1(df, ["BE"], ["GB", "FR"], 2)

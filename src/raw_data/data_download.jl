@@ -13,7 +13,7 @@ dir_io = "C:/Users/u0148308/data/comext/" # location of input/output (io)
 
 url = "https://ec.europa.eu/eurostat/estat-navtree-portlet-prod/BulkDownloadListing?sort=1&file=comext%2FCOMEXT_DATA%2FPRODUCTS%2F"
 
-years = string.(2015:2020)
+years = string.(2001:2020)
 months = lpad.(1:12, 2, '0')
 
 for i in years
