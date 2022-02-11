@@ -4,7 +4,13 @@
 
 using DataFrames, CSV, XLSX, LinearAlgebra, Statistics
 
-dir_io = "C:/Users/u0148308/data/comext/" # location of input/output (io)
+# other scripts
+dir_home = "x:/VIVES/1-Personal/Florian/git/2022_01_comext/src/"
+include(dir_home * "functions.jl")
+
+# location of data input/output (io)
+dir_io = "C:/Users/u0148308/data/comext/" 
+dir_dropbox = "C:/Users/u0148308/Dropbox/BREXIT/"
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -12,73 +18,13 @@ dir_io = "C:/Users/u0148308/data/comext/" # location of input/output (io)
 years = string.(2015:2015)
 months = lpad.(1:12, 2, '0')
 
-# initial cleaning of the data               
-function initial_cleaning(year::String, month::String)
-    
-    path = dir_io * "raw/" * "full" * year * month * ".dat"
-    df = CSV.read(path, DataFrame)
-
-    # column types
-    # Notes:
-    #   - treat PERIOD as numeric to allow sorting
-    transform!(df, [:DECLARANT, :PARTNER, :PERIOD] .=> ByRow(Int64), renamecols=false)
-
-    # additional PRODUCT_BEC5 column from 2017 onwards
-    if year in string.(2001:2016) # why does shorthand not work?
-        df.PRODUCT_BEC5 .= missing
-    else
-    end
-
-    # column names different: PRODUCT_cpa2002, PRODUCT_cpa2008
-    if year in string.(2001:2001)
-        rename!(df, :PRODUCT_cpa2002 => :PRODUCT_CPA2002, :PRODUCT_cpa2008 => :PRODUCT_CPA2008)
-    elseif year in string.(2002:2007)
-        rename!(df, :PRODUCT_cpa2008 => :PRODUCT_CPA2008)
-    end
-
-    cols_string = ["DECLARANT_ISO", "PARTNER_ISO", "TRADE_TYPE", "PRODUCT_NC", "PRODUCT_SITC", "PRODUCT_CPA2002", "PRODUCT_CPA2008", "PRODUCT_CPA2_1",
-                   "PRODUCT_BEC", "PRODUCT_BEC5", "PRODUCT_SECTION", "FLOW", "STAT_REGIME"]
-    transform!(df,  cols_string .=> ByRow(string), renamecols=false)
-
-    transform!(df, [:VALUE_IN_EUROS, :QUANTITY_IN_KG, :SUP_QUANTITY] .=> ByRow(Float64), renamecols=false)
-
-    # formatting
-    df[:, :TRADE_TYPE] .= ifelse.(df[:, :TRADE_TYPE] .== "I", "intra", "extra")
-    df[:, :FLOW] .= ifelse.(df[:, :FLOW] .== "1", "imports", "exports")
-    df[:, :SUPP_UNIT] .= ifelse.(ismissing.(df[:, :SUPP_UNIT]), missing, string.(df[:, :SUPP_UNIT])) # to make sure type is of Union{Missing, String}
-
-    # missing data
-    # Notes:
-    #   - if value or quanity is reported as 0 use missing instead
-    transform!(df, [:VALUE_IN_EUROS, :QUANTITY_IN_KG, :SUP_QUANTITY] .=> ByRow(x->ifelse(x == 0.0, missing, x)), renamecols=false)
-
-    # aggregate over STAT_REGIME, SUPP_UNIT
-    # Notes:
-    #   - only lose few rows ~1%
-    #   - disregard SUPP_UNIT and SUP_QUANTITY for the time being
-    cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "TRADE_TYPE", "PRODUCT_NC", "PRODUCT_SITC", "PRODUCT_CPA2002", "PRODUCT_CPA2008", "PRODUCT_CPA2_1",
-                     "PRODUCT_BEC", "PRODUCT_BEC5", "PRODUCT_SECTION", "FLOW", "PERIOD"]
-    gdf = groupby(df, cols_grouping)
-    df = combine(gdf, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] .=> sum, renamecols=false)
-
-    return df
-end
-
-# computes pct_change between observations
-function pct_change(input::AbstractVector)
-    [i == 1 ? missing : (input[i]-input[i-1])/input[i-1]*100 for i in eachindex(input)]
-end
-
-# computes pct_change between successive months
-function mom_change(period::AbstractVector, input::AbstractVector)
-    [i == 1 ? missing : period[i]-period[i-1] != 1 ? missing : (input[i]-input[i-1])/input[i-1]*100 for i in eachindex(input)]
-end
-
 # subsets string
 g(x) = x[end-1:end]
 
 periods = repeat(years, inner=12) .* repeat(months, outer=length(years))
 periods = parse.(Int64, periods) # convert to Int64 (actually needed? think we can do all with String)
+
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 # create monthly files
@@ -207,3 +153,4 @@ for (i, time) in enumerate(periods[1:end-3])
 
 end
 
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------

@@ -4,14 +4,27 @@
 
 using DataFrames, CSV, XLSX, LinearAlgebra, Statistics, StatsBase, StatsPlots, Dates
 
-dir_io = "C:/Users/u0148308/data/comext/" # location of input/output (io)
+# other scripts
+dir_home = "x:/VIVES/1-Personal/Florian/git/2022_01_comext/src/"
+include(dir_home * "functions.jl")
+
+# location of data input/output (io)
+dir_io = "C:/Users/u0148308/data/comext/" 
 dir_dropbox = "C:/Users/u0148308/Dropbox/BREXIT/"
+
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 # Notes:
 #   - figure 1: evolution of total imports/exports from BE to UK vis-a-vis FR, NL, DE and EU
+#       + HP filter available, what do chose for λ?
 #   - figure 2: evolution of imports/exports from BE to UK at 2digit level
+#       + HP filter available, what do chose for λ?
 #   - figure 3: evolution of share of imports/exports from BE to UK of total imports/exports from BE
 #       + also add FR, DE, NL, EU27
+#   - table 1: evolution of most important products at 2digit level
+#       + shares per product available for bilteral trade (i.e. sum to 100%) or for total trade (i.e. sum to figure 3)
+#       + could compute figure 3 from data of table 1 as well!
+#
 #   - all figures in values and unit values (unit prices):
 #       + compute a price index as using a weighted sum
 #   - include vertical lines for different Brexit events
@@ -19,7 +32,6 @@ dir_dropbox = "C:/Users/u0148308/Dropbox/BREXIT/"
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 # Brexit events
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
-
 
 # vertical line
 # vline!([Date(2016,6,23)], label="", color=:black, lw=2) # referendum
@@ -35,6 +47,11 @@ dir_dropbox = "C:/Users/u0148308/Dropbox/BREXIT/"
 # vline!([Date(2020,12,31)], label="") # transition period ends
 # vline!([Date(2021,04,27)], label="") # EU passes Trade and Cooperation Agreement
 
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
+# HP filter (Hodrick–Prescott)
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+λ = 20
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 # Figure 1
@@ -47,8 +64,14 @@ df = CSV.read(path, DataFrame)
 transform!(df, [:DECLARANT_ISO, :PARTNER_ISO, :FLOW] .=> ByRow(string), renamecols=false)
 transform!(df, :PERIOD => ByRow(x -> Date(string(x), DateFormat("yyyymm"))) => :DATE)
 
+# HP filter
+cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW"]
+gdf = groupby(df, cols_grouping)
+transform!(gdf, [:VALUE_IN_EUROS, :QUANTITY_IN_KG, :PRICE_INDEX] .=> (x -> HP(x, λ)) .=> [:VALUE_IN_EUROS_HP, :QUANTITY_IN_KG_HP, :PRICE_INDEX_HP])
+
 # create unweighted unit prices
 transform!(df, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] => ByRow((v,q) -> v/q) => :UNIT_PRICE)
+transform!(df, [:VALUE_IN_EUROS_HP, :QUANTITY_IN_KG_HP] => ByRow((v,q) -> v/q) => :UNIT_PRICE_HP)
 
 # manipulation
 # Notes:
@@ -69,7 +92,7 @@ for flow in ["imports", "exports"]
     # Notes:
     #   - take out EU for scale
     p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PARTNER_ISO => ByRow(x -> x != "EU")) plot(:DATE, :VALUE_IN_EUROS,
-            group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="euros", title="Belgian "*flow)
+            group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="euros", title="Belgian "* flow*": values")
     vline!([Date(2016,6,23)], label="refer", color=:black, lw=2) # refer
     vline!([Date(2020,01,31)], label="exit", color=:black, lw=2) # exit
     vline!([Date(2020,12,31)], label="trans end", color=:black, lw=2) # trans end
@@ -80,7 +103,7 @@ for flow in ["imports", "exports"]
     # Notes:
     #   - unit prices are extremely volatile, 3 MMA would be useful
     p = @df subset(df, :FLOW => ByRow(x -> x == flow)) plot(:DATE, :PRICE_INDEX,
-        group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="price index (weighted)", title="Belgian "*flow)
+        group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="price index (weighted)", title="Belgian "*flow*": price index (weighted)")
     vline!([Date(2016,6,23)], label="refer", color=:black, lw=2) # refer
     vline!([Date(2020,01,31)], label="exit", color=:black, lw=2) # exit
     vline!([Date(2020,12,31)], label="trans end", color=:black, lw=2) # trans end
@@ -88,7 +111,7 @@ for flow in ["imports", "exports"]
     savefig(p, dir_dropbox * "results/images/fig1/" * "fig1_" * flow * "_prices_weighted" * ".png")
 
     p = @df subset(df, :FLOW => ByRow(x -> x == flow)) plot(:DATE, :PRICE_INDEX_3MMA,
-        group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="price index (weighted, 3MMA)", title="Belgian "*flow)
+        group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="price index (weighted, 3MMA)", title="Belgian "*flow*": price index (weighted, 3MMA)")
     vline!([Date(2016,6,23)], label="refer", color=:black, lw=2) # refer
     vline!([Date(2020,01,31)], label="exit", color=:black, lw=2) # exit
     vline!([Date(2020,12,31)], label="trans end", color=:black, lw=2) # trans end
@@ -97,7 +120,7 @@ for flow in ["imports", "exports"]
 
     # price index (unweighted unit prices)
     p = @df subset(df, :FLOW => ByRow(x -> x == flow)) plot(:DATE, :UNIT_PRICE,
-        group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="price index (unweighted)", title="Belgian "*flow)
+        group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="price index (unweighted)", title="Belgian "*flow*": price index (unweighted)")
     vline!([Date(2016,6,23)], label="refer", color=:black, lw=2) # refer
     vline!([Date(2020,01,31)], label="exit", color=:black, lw=2) # exit
     vline!([Date(2020,12,31)], label="trans end", color=:black, lw=2) # trans end
@@ -106,6 +129,41 @@ for flow in ["imports", "exports"]
 
 end
 
+# plotting of HP
+for flow in ["imports", "exports"]
+
+    # values
+    # Notes:
+    #   - take out EU for scale
+    p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PARTNER_ISO => ByRow(x -> x != "EU")) plot(:DATE, :VALUE_IN_EUROS_HP,
+            group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="euros", title="Belgian "*flow*": values (HP)")
+    vline!([Date(2016,6,23)], label="refer", color=:black, lw=2) # refer
+    vline!([Date(2020,01,31)], label="exit", color=:black, lw=2) # exit
+    vline!([Date(2020,12,31)], label="trans end", color=:black, lw=2) # trans end
+    savefig(p, dir_io * "clean/images/fig1/HP/" * "fig1_" * flow * "_values" * "_HP" * ".png") # export image locally
+    savefig(p, dir_dropbox * "results/images/fig1/HP/" * "fig1_" * flow * "_values" * "_HP" * ".png") # export image dropbox
+
+    # price index (weighted unit prices)
+    # Notes:
+    #   - unit prices are extremely volatile, 3 MMA would be useful
+    p = @df subset(df, :FLOW => ByRow(x -> x == flow)) plot(:DATE, :PRICE_INDEX_HP,
+        group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="price index (weighted)", title="Belgian "*flow*": price index (weighted, HP)")
+    vline!([Date(2016,6,23)], label="refer", color=:black, lw=2) # refer
+    vline!([Date(2020,01,31)], label="exit", color=:black, lw=2) # exit
+    vline!([Date(2020,12,31)], label="trans end", color=:black, lw=2) # trans end
+    savefig(p, dir_io * "clean/images/fig1/HP/" * "fig1_" * flow * "_prices_weighted" * "_HP" * ".png")
+    savefig(p, dir_dropbox * "results/images/fig1/HP/" * "fig1_" * flow * "_prices_weighted" * "_HP" * ".png")
+
+    # price index (unweighted unit prices)
+    p = @df subset(df, :FLOW => ByRow(x -> x == flow)) plot(:DATE, :UNIT_PRICE_HP,
+        group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="price index (unweighted)", title="Belgian "*flow*": price index (unweighted, HP)")
+    vline!([Date(2016,6,23)], label="refer", color=:black, lw=2) # refer
+    vline!([Date(2020,01,31)], label="exit", color=:black, lw=2) # exit
+    vline!([Date(2020,12,31)], label="trans end", color=:black, lw=2) # trans end
+    savefig(p, dir_io * "clean/images/fig1/HP/" * "fig1_" * flow * "_prices_unweighted" * "_HP" * ".png") 
+    savefig(p, dir_dropbox * "results/images/fig1/HP/" * "fig1_" * flow * "_prices_unweighted" * "_HP" * ".png") 
+
+end
 
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -119,8 +177,14 @@ df = CSV.read(path, DataFrame)
 transform!(df, [:DECLARANT_ISO, :PARTNER_ISO, :FLOW] .=> ByRow(string), renamecols=false)
 transform!(df, :PERIOD => ByRow(x -> Date(string(x), DateFormat("yyyymm"))) => :DATE)
 
+# HP filter
+cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW", "PRODUCT_NC_digits"]
+gdf = groupby(df, cols_grouping)
+transform!(gdf, [:VALUE_IN_EUROS, :QUANTITY_IN_KG, :PRICE_INDEX] .=> (x -> HP(x, λ)) .=> [:VALUE_IN_EUROS_HP, :QUANTITY_IN_KG_HP, :PRICE_INDEX_HP])
+
 # create unweighted unit prices
 transform!(df, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] => ByRow((v,q) -> v/q) => :UNIT_PRICE)
+transform!(df, [:VALUE_IN_EUROS_HP, :QUANTITY_IN_KG_HP] => ByRow((v,q) -> v/q) => :UNIT_PRICE_HP)
 
 # manipulation
 # Notes:
@@ -140,7 +204,7 @@ for flow in ["imports", "exports"]
     
     # values
     p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PRODUCT_NC_digits => ByRow(x -> x in product_range)) plot(:DATE, :VALUE_IN_EUROS,
-        group=:PRODUCT_NC_digits, lw=2, legend=:bottomleft, ylabel="euros", title="Belgian "*flow)
+        group=:PRODUCT_NC_digits, lw=2, legend=:bottomleft, ylabel="euros", title="Belgian "*flow*"values")
     vline!([Date(2016,6,23)], label="refer", color=:black, lw=2) # refer
     vline!([Date(2020,01,31)], label="exit", color=:black, lw=2) # exit
     vline!([Date(2020,12,31)], label="trans end", color=:black, lw=2) # trans end
@@ -149,7 +213,7 @@ for flow in ["imports", "exports"]
 
     # price index (weighted unit prices)
     p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PRODUCT_NC_digits => ByRow(x -> x in product_range)) plot(:DATE, :PRICE_INDEX,
-        group=:PRODUCT_NC_digits, lw=2, legend=:bottomleft, ylabel="unit prices (weighted)", title="Belgian "*flow)
+        group=:PRODUCT_NC_digits, lw=2, legend=:bottomleft, ylabel="unit prices (weighted)", title="Belgian "*flow*"unit prices (weighted)")
     vline!([Date(2016,6,23)], label="refer", color=:black, lw=2) # refer
     vline!([Date(2020,01,31)], label="exit", color=:black, lw=2) # exit
     vline!([Date(2020,12,31)], label="trans end", color=:black, lw=2) # trans end
@@ -158,7 +222,7 @@ for flow in ["imports", "exports"]
 
     # price index (unweighted unit prices)
     p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PRODUCT_NC_digits => ByRow(x -> x in product_range)) plot(:DATE, :UNIT_PRICE,
-        group=:PRODUCT_NC_digits, lw=2, legend=:bottomleft, ylabel="unit prices (unweighted)", title="Belgian "*flow)
+        group=:PRODUCT_NC_digits, lw=2, legend=:bottomleft, ylabel="unit prices (unweighted)", title="Belgian "*flow*"unit prices (unweighted)")
     vline!([Date(2016,6,23)], label="refer", color=:black, lw=2) # refer
     vline!([Date(2020,01,31)], label="exit", color=:black, lw=2) # exit
     vline!([Date(2020,12,31)], label="trans end", color=:black, lw=2) # trans end
@@ -168,6 +232,41 @@ for flow in ["imports", "exports"]
     end
 end
 
+for flow in ["imports", "exports"]
+    for i in products
+    
+    product_range = i:i+7
+    end_range = string(product_range[end])
+    
+    # values
+    p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PRODUCT_NC_digits => ByRow(x -> x in product_range)) plot(:DATE, :VALUE_IN_EUROS_HP,
+        group=:PRODUCT_NC_digits, lw=2, legend=:bottomleft, ylabel="euros", title="Belgian "*flow*": values")
+    vline!([Date(2016,6,23)], label="refer", color=:black, lw=2) # refer
+    vline!([Date(2020,01,31)], label="exit", color=:black, lw=2) # exit
+    vline!([Date(2020,12,31)], label="trans end", color=:black, lw=2) # trans end
+    savefig(p, dir_io * "clean/images/fig2/HP/" * "fig2_" * flow * "_" * end_range * "_values" * "_HP" * ".png") # export image
+    savefig(p, dir_dropbox * "results/images/fig2/HP/" * "fig2_" * flow * "_" * end_range * "_values" * "_HP" * ".png") # export image
+
+    # price index (weighted unit prices)
+    p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PRODUCT_NC_digits => ByRow(x -> x in product_range)) plot(:DATE, :PRICE_INDEX_HP,
+        group=:PRODUCT_NC_digits, lw=2, legend=:bottomleft, ylabel="unit prices (weighted)", title="Belgian "*flow*": unit prices (weighted)")
+    vline!([Date(2016,6,23)], label="refer", color=:black, lw=2) # refer
+    vline!([Date(2020,01,31)], label="exit", color=:black, lw=2) # exit
+    vline!([Date(2020,12,31)], label="trans end", color=:black, lw=2) # trans end
+    savefig(p, dir_io * "clean/images/fig2/HP/" * "fig2_" * flow * "_" * end_range * "_prices_weighted" * "_HP" * ".png")
+    savefig(p, dir_dropbox * "results/images/fig2/HP/" * "fig2_" * flow * "_" * end_range * "_prices_weighted" * "_HP" * ".png")
+
+    # price index (unweighted unit prices)
+    p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PRODUCT_NC_digits => ByRow(x -> x in product_range)) plot(:DATE, :UNIT_PRICE_HP,
+        group=:PRODUCT_NC_digits, lw=2, legend=:bottomleft, ylabel="unit prices (unweighted)", title="Belgian "*flow*": unit prices (unweighted)")
+    vline!([Date(2016,6,23)], label="refer", color=:black, lw=2) # refer
+    vline!([Date(2020,01,31)], label="exit", color=:black, lw=2) # exit
+    vline!([Date(2020,12,31)], label="trans end", color=:black, lw=2) # trans end
+    savefig(p, dir_io * "clean/images/fig2/HP/" * "fig2_" * flow * "_" * end_range * "_prices_unweighted" * "_HP" * ".png") 
+    savefig(p, dir_dropbox * "results/images/fig2/HP/" * "fig2_" * flow * "_" * end_range * "_prices_unweighted" * "_HP" * ".png") 
+
+    end
+end
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 # Figure 3
@@ -205,7 +304,8 @@ for flow in ["imports", "exports"]
 end
 
 
-
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Table 1
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
