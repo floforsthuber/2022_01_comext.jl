@@ -201,6 +201,7 @@ end
 function tab1(df::DataFrame, declarants::Vector{String}, partners::Vector{String}, digits::Int64)
 
     # clean df
+    subset!(df, :DECLARANT_ISO => ByRow(x -> x in declarants))
     subset!(df, :PRODUCT_NC => ByRow(x -> x != "TOTAL")) # take out TOTAL
     subset!(df, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] .=> ByRow(x -> !ismissing(x))) # take out missing values
 
@@ -220,8 +221,7 @@ function tab1(df::DataFrame, declarants::Vector{String}, partners::Vector{String
     df_total = combine(gdf, :VALUE_IN_EUROS => sum => :VALUE_TOTAL, :QUANTITY_IN_KG => sum => :QUANTITY_TOTAL)
 
     # compute total exports/imports per partner
-    df_partner = subset(df, :DECLARANT_ISO => ByRow(x -> x in declarants), :PARTNER_ISO => ByRow(x -> x in partners))
-
+    df_partner = subset(df, :PARTNER_ISO => ByRow(x -> x in partners))
     cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW", "YEAR"]
     gdf = groupby(df_partner, cols_grouping)
     df_total_partner = combine(gdf, :VALUE_IN_EUROS => sum => :VALUE_TOTAL_PARTNER, :QUANTITY_IN_KG => sum => :QUANTITY_TOTAL_PARTNER)

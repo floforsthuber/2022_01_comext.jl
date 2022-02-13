@@ -23,8 +23,8 @@ dir_io = "C:/Users/u0148308/data/comext/"
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 # timespan
-years = string.(2021:2021)
-months = lpad.(1:2, 2, '0')
+years = string.(2001:2021)
+months = lpad.(1:12, 2, '0')
 
 # EU27
 ctrys_EU27 = ["AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GR", "HR", "HU",
@@ -66,10 +66,10 @@ for i in years
 end
 
 # export 
-# CSV.write(dir_io * "clean/" * "df_fig1" * ".csv", df_fig1)
-# CSV.write(dir_io * "clean/" * "df_fig2" * ".csv", df_fig2)
-# CSV.write(dir_io * "clean/" * "df_fig3" * ".csv", df_fig3)
-# CSV.write(dir_io * "clean/" * "df_tab1" * ".csv", df_tab1)
+CSV.write(dir_io * "clean/" * "df_fig1" * ".csv", df_fig1)
+CSV.write(dir_io * "clean/" * "df_fig2" * ".csv", df_fig2)
+CSV.write(dir_io * "clean/" * "df_fig3" * ".csv", df_fig3)
+CSV.write(dir_io * "clean/" * "df_tab1" * ".csv", df_tab1)
 
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------

@@ -77,6 +77,8 @@ transform!(df, [:VALUE_IN_EUROS_HP, :QUANTITY_IN_KG_HP] => ByRow((v,q) -> v/q) =
 # Notes:
 #   - there are exceptionally big observations in some months (needs further investigation), remove for now
 transform!(df, :PRICE_INDEX => ByRow(x -> ifelse(x > 20_000, missing, x)), renamecols=false)
+transform!(df, :PRICE_INDEX_HP => ByRow(x -> ifelse(x > 20_000 || x < 0, missing, x)), renamecols=false)
+
 
 # create 3MMA as observations are very volatile
 movingaverage(input::AbstractArray, n::Int64) = [i < n ? missing : mean(input[i-n+1:i]) for i in eachindex(input)]
@@ -279,13 +281,18 @@ df = CSV.read(path, DataFrame)
 transform!(df, [:DECLARANT_ISO, :PARTNER_ISO, :FLOW] .=> ByRow(string), renamecols=false)
 transform!(df, :PERIOD => ByRow(x -> Date(string(x), DateFormat("yyyymm"))) => :DATE)
 
+# HP filter
+cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW"]
+gdf = groupby(df, cols_grouping)
+transform!(gdf, [:VALUE_SHARE, :QUANTITY_SHARE] .=> (x -> HP(x, λ)) .=> [:VALUE_SHARE_HP, :QUANTITY_SHARE_HP])
+
 
 # plotting
 for flow in ["imports", "exports"]
 
     # value share
-    p = @df subset(df, :FLOW => ByRow(x -> x == flow)) plot(:DATE, :VALUE_SHARE,
-            group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="percentages", title="Belgian "*flow)
+    p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PARTNER_ISO => ByRow(x -> !(x == "EU"))) plot(:DATE, :VALUE_SHARE,
+            group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="percentages", title="Belgian "*flow*": value share")
     vline!([Date(2016,6,23)], label="refer", color=:black, lw=2) # refer
     vline!([Date(2020,01,31)], label="exit", color=:black, lw=2) # exit
     vline!([Date(2020,12,31)], label="trans end", color=:black, lw=2) # trans end
@@ -293,8 +300,8 @@ for flow in ["imports", "exports"]
     savefig(p, dir_dropbox * "results/images/fig3/" * "fig3_" * flow * "_value_share" * ".png") # export image
 
     # quantity share
-    p = @df subset(df, :FLOW => ByRow(x -> x == flow)) plot(:DATE, :QUANTITY_SHARE,
-        group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="kg", title="Belgian "*flow)
+    p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PARTNER_ISO => ByRow(x -> !(x == "EU"))) plot(:DATE, :QUANTITY_SHARE,
+        group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="kg", title="Belgian "*flow*": quantity share")
     vline!([Date(2016,6,23)], label="refer", color=:black, lw=2) # refer
     vline!([Date(2020,01,31)], label="exit", color=:black, lw=2) # exit
     vline!([Date(2020,12,31)], label="trans end", color=:black, lw=2) # trans end
@@ -303,10 +310,58 @@ for flow in ["imports", "exports"]
 
 end
 
+# plotting HP
+for flow in ["imports", "exports"]
+
+    # value share
+    p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PARTNER_ISO => ByRow(x -> !(x == "EU"))) plot(:DATE, :VALUE_SHARE_HP,
+            group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="percentages", title="Belgian "*flow*": value share")
+    vline!([Date(2016,6,23)], label="refer", color=:black, lw=2) # refer
+    vline!([Date(2020,01,31)], label="exit", color=:black, lw=2) # exit
+    vline!([Date(2020,12,31)], label="trans end", color=:black, lw=2) # trans end
+    savefig(p, dir_io * "clean/images/fig3/HP/" * "fig3_" * flow * "_value_share" * "_HP" * ".png") # export image
+    savefig(p, dir_dropbox * "results/images/fig3/HP/" * "fig3_" * flow * "_value_share" * "_HP" * ".png") # export image
+
+    # quantity share
+    p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PARTNER_ISO => ByRow(x -> !(x == "EU"))) plot(:DATE, :QUANTITY_SHARE_HP,
+        group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="kg", title="Belgian "*flow*": quantity share")
+    vline!([Date(2016,6,23)], label="refer", color=:black, lw=2) # refer
+    vline!([Date(2020,01,31)], label="exit", color=:black, lw=2) # exit
+    vline!([Date(2020,12,31)], label="trans end", color=:black, lw=2) # trans end
+    savefig(p, dir_io * "clean/images/fig3/HP/" * "fig3_" * flow * "_quantity_share" * "_HP" * ".png") # export image
+    savefig(p, dir_dropbox * "results/images/fig3/HP/" * "fig3_" * flow * "_quantity_share" * "_HP" * ".png") # export image
+
+end
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 # Table 1
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+path = dir_io * "clean/" * "df_tab1" * ".csv"
+df = CSV.read(path, DataFrame)
+
+# formatting
+transform!(df, [:DECLARANT_ISO, :PARTNER_ISO, :FLOW] .=> ByRow(string), renamecols=false)
+transform!(df, :YEAR => ByRow(x -> Date(string(x), DateFormat("yyyy"))) => :DATE)
+
+df_tab1 = DataFrame(DECLARANT_ISO=String[], PARTNER_ISO=String[], FLOW=String[], YEAR=Int64[],
+                    PRODUCT_NC_digits=Int64[], VALUE_SHARE_TOTAL=Float64[])
 
 
+tab = subset(df, :PARTNER_ISO => ByRow(x -> x == "GB"), :FLOW => ByRow(x -> x == "imports"), :YEAR => ByRow(x -> x == 2001))
+tab = tab[:, [:DECLARANT_ISO, :PARTNER_ISO, :FLOW, :YEAR, :PRODUCT_NC_digits, :VALUE_SHARE_TOTAL]]
+sort!(tab, order(:VALUE_SHARE_TOTAL, rev=true))
+
+
+for i in 2001:2021
+    
+    tab = subset(df, :PARTNER_ISO => ByRow(x -> x == "GB"), :FLOW => ByRow(x -> x == "imports"), :YEAR => ByRow(x -> x == i))
+    tab = tab[:, [:DECLARANT_ISO, :PARTNER_ISO, :FLOW, :YEAR, :PRODUCT_NC_digits, :VALUE_SHARE_TOTAL]]
+    sort!(tab, order(:VALUE_SHARE_TOTAL, rev=true))
+    append!(df_tab1, first(tab, 10))
+
+end
+
+
+
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
