@@ -10,6 +10,7 @@ include(dir_home * "functions.jl")
 
 # location of data input/output (io)
 dir_io = "C:/Users/u0148308/data/comext/" 
+dir_dropbox = "C:/Users/u0148308/Dropbox/BREXIT/"
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -65,12 +66,17 @@ for i in years
     end
 end
 
-# export 
+# export locally
 CSV.write(dir_io * "clean/" * "df_fig1" * ".csv", df_fig1)
 CSV.write(dir_io * "clean/" * "df_fig2" * ".csv", df_fig2)
 CSV.write(dir_io * "clean/" * "df_fig3" * ".csv", df_fig3)
 CSV.write(dir_io * "clean/" * "df_tab1" * ".csv", df_tab1)
 
+# export Dropbox
+CSV.write(dir_dropbox * "results/" * "df_fig1" * ".csv", df_fig1)
+CSV.write(dir_dropbox * "results/" * "df_fig2" * ".csv", df_fig2)
+CSV.write(dir_dropbox * "results/" * "df_fig3" * ".csv", df_fig3)
+CSV.write(dir_dropbox * "results/" * "df_tab1" * ".csv", df_tab1)
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
