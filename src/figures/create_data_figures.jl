@@ -67,9 +67,9 @@ for i in years
 end
 
 # export locally
-CSV.write(dir_io * "clean/" * "df_fig1" * ".csv", df_fig1)
-CSV.write(dir_io * "clean/" * "df_fig2" * ".csv", df_fig2)
-CSV.write(dir_io * "clean/" * "df_fig3" * ".csv", df_fig3)
+#CSV.write(dir_io * "clean/" * "df_fig1" * ".csv", df_fig1)
+#CSV.write(dir_io * "clean/" * "df_fig2" * ".csv", df_fig2)
+#CSV.write(dir_io * "clean/" * "df_fig3" * ".csv", df_fig3)
 CSV.write(dir_io * "clean/" * "df_tab1" * ".csv", df_tab1)
 
 # export Dropbox
