@@ -81,7 +81,6 @@ transform!(df, :PRICE_INDEX_HP => ByRow(x -> ifelse(x > 20_000 || x < 0, missing
 
 
 # create 3MMA as observations are very volatile
-movingaverage(input::AbstractArray, n::Int64) = [i < n ? missing : mean(input[i-n+1:i]) for i in eachindex(input)]
 cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW"]
 gdf = groupby(df, cols_grouping)
 df = transform(gdf, :PRICE_INDEX => (x -> movingaverage(x,3)) => :PRICE_INDEX_3MMA)
@@ -182,16 +181,6 @@ savefig(p, dir_dropbox * "results/images/fig1/HP/" * "fig1_" * "BE_GB" * "_price
 # Figure 4
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-
-# requires PERIOD to be sorted when grouped
-function rolling_std(input::AbstractArray, n::Int64)
-    @assert 1 <= n <= length(input)
-    output = missings(Float64, length(input)) # initialize vector (keep first n as missing)
-    for i in eachindex(output)[n:end]
-        output[i] = std(input[i-n+1:i])
-    end
-    return output
-end
 
 # rolling standard deviation
 cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW"]
