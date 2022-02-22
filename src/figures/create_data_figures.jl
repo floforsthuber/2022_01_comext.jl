@@ -24,7 +24,7 @@ dir_dropbox = "C:/Users/u0148308/Dropbox/BREXIT/"
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 # timespan
-years = string.(2001:2001)
+years = string.(2001:2021)
 months = lpad.(1:12, 2, '0')
 
 # EU27
@@ -52,8 +52,11 @@ df_tab1 = DataFrame(DECLARANT_ISO=String[], PARTNER_ISO=String[], FLOW=String[],
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 only_BE = true
-ifelse(only_BE == true, println(" - Using individual country data for computations. \n"),
-                 println(" - Using raw data from Eurostat for computations. \n"))
+if only_BE == true
+    println(" - Using individual country data for computations. \n")
+else
+    println(" - Using raw data from Eurostat for computations. \n")
+end
 
 for i in years
     for j in months
@@ -92,5 +95,6 @@ CSV.write(dir_dropbox * "results/" * "df_fig2" * ".csv", df_fig2)
 CSV.write(dir_dropbox * "results/" * "df_fig3" * ".csv", df_fig3)
 CSV.write(dir_dropbox * "results/" * "df_tab1" * ".csv", df_tab1)
 
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
