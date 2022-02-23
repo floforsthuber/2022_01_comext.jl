@@ -165,6 +165,26 @@ function rolling_std(input::AbstractArray, n::Int64)
 end
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Median absolute deviation
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# Wikipedia: https://en.wikipedia.org/wiki/Median_absolute_deviation
+#   The median absolute deviation is a measure of statistical dispersion. Moreover, the MAD is a robust statistic, 
+#   being more resilient to outliers in a data set than the standard deviation. In the standard deviation, the distances from the mean are squared, 
+#   so large deviations are weighted more heavily, and thus outliers can heavily influence it.
+#   In the MAD, the deviations of a small number of outliers are irrelevant. 
+
+function MAD_method(x)
+    med = median(x)
+    values = [abs(x[i] - med) for i in eachindex(x)]
+    mad = median(values)
+    outlyingness = [abs(x[i] - med)/mad for i in eachindex(x)]
+    return outlyingness
+end
+
+
+
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
 # HP filter (Hodrick–Prescott)
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 

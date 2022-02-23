@@ -73,6 +73,7 @@ for i in years
             subset!(df, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] .=> ByRow(x -> !ismissing(x)))
             subset!(df, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] .=> ByRow(x -> x != 0))
             transform!(df, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] .=> ByRow(Float64), renamecols=false)
+
         end
 
         # append data for figures/tables
