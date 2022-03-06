@@ -19,38 +19,6 @@ df_VLAIO = DataFrame(PERIOD=Int64[], PRODUCT_NC=String[], PRODUCT_NC_LAB1=String
                 TRADE_TYPE=String[], PARTNER_ISO=String[], FLOW=String[], VALUE_IN_EUROS=Union{Missing, Float64}[], QUANTITY_IN_KG=Union{Missing, Float64}[])
 
 
-# slightly modified functions
-function append_WORLD(df::DataFrame)
-
-    # sum over PARTNER
-    cols_grouping = ["DECLARANT_ISO", "PRODUCT_NC", "PRODUCT_NC_LAB1", "PRODUCT_NC_LAB2", "TRADE_TYPE", "FLOW", "PERIOD"]
-    gdf = groupby(df, cols_grouping)
-    df_WORLD = combine(gdf, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] .=> (x -> sum(skipmissing(x))), renamecols=false)
-
-    df_WORLD.TRADE_TYPE .= "total"
-    df_WORLD.PARTNER_ISO .= "WORLD"
-
-    df = vcat(df, df_WORLD)
-
-    return df
-end
-
-function append_EU(df::DataFrame, EU::Vector{String})
-
-    # subset and sum over EU ctrys
-    df_EU = subset(df, :PARTNER_ISO => ByRow(x -> x in EU))
-    cols_grouping = ["DECLARANT_ISO", "PRODUCT_NC", "PRODUCT_NC_LAB1", "PRODUCT_NC_LAB2", "TRADE_TYPE", "FLOW", "PERIOD"]
-    gdf = groupby(df_EU, cols_grouping)
-    df_EU = combine(gdf, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] .=> (x -> sum(skipmissing(x))), renamecols=false)
-
-    df_EU.TRADE_TYPE .= "intra"
-    df_EU.PARTNER_ISO .= "EU"
-
-    df = vcat(df, df_EU)
-
-    return df
-end
-
 # EU27 in Dutch
 EU27 = ["Roemenië", "Griekenland", "Oostenrijk", "Polen", "Duitsland", "Spanje", "Hongarije", "Slovakije", "Italië", "Nederland",
        "Frankrijk", "Letland", "Kroatië", "Cyprus", "Malta", "Litouwen", "Slovenië", "Estland", "Portugal", "Finland", "Tsjechië", 
@@ -82,16 +50,12 @@ for i in string.(2014:2021)
     df.PERIOD = g.(string.(df.PERIOD))
     df.PERIOD = parse.(Int64, df.PERIOD)
 
-    df.PRODUCT_NC = lpad.(string.(df.PRODUCT_NC), 2, '0')
+    df.PRODUCT_NC = lpad.(string.(df.PRODUCT_NC), 8, '0')
 
     df.FLOW = ifelse.(df.FLOW .== "X", "exports", "imports")
 
-    # create WORLD/EU
-    df = append_WORLD(df)
-    df = append_EU(df, EU27)
-
     # append
-    append!(df_VLAIO, df)
+    append!(df_VLAIO, df) # missing values are kept in output, essentially just formatted data
 
 end
 
