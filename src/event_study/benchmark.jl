@@ -108,14 +108,9 @@ transform!(df, :PERIOD => ByRow(x -> Date(string(x), DateFormat("yyyymm"))) => :
 # drop missing 
 subset!(df, :YOY_PRICE => ByRow(x -> !ismissing(x)))
 
-# Brexit dates
-referendum = Date(2016, 07, 01)
-exit = Date(2020, 02, 01)
-trade = Date(2021, 05, 01)
-brexit_dates = [referendum; exit; trade]
 
 # function to find common products 
-function common_products(df::DataFrame, treated::String, control::Vector{String}, brexit_dates::Vector, flow::String, interval::Int64)
+function common_products(df::DataFrame, treated::String, control::Vector{String}, brexit_dates::Vector{Date}, flow::String, interval::Int64)
 
     prod = unique(df.PRODUCT_NC) # initialize
 
@@ -142,44 +137,77 @@ function common_products(df::DataFrame, treated::String, control::Vector{String}
     return sort(prod)
 end
 
-prod_exports = common_products(df, "Verenigd Koninkrijk", ["Nederland", "Duitsland", "Frankrijk", "Italië"], brexit_dates, "exports", 12) # 1682
-prod_imports = common_products(df, "Verenigd Koninkrijk", ["Nederland", "Duitsland", "Frankrijk"], brexit_dates, "imports", 12)
+# function to produce regression data
+function data_reg(df::DataFrame, treated::String, control::Vector{String}, brexit::Date, flow::String, interval::Int64, products::Vector{String})
+
+    # pre- and post-treatment timeframe
+    pre_treatment = brexit-Month(1)-Month(interval):Month(1):brexit-Month(1)
+    post_treatment = brexit:Month(1):brexit+Month(interval)
+
+    # data for log change regression
+    df_reg = subset(df, :PARTNER_ISO => ByRow(x -> x in [treated; control]), :FLOW => ByRow(x -> x == flow), 
+                        :DATE => ByRow(x -> x in [pre_treatment; post_treatment]), :PRODUCT_NC => ByRow(x -> x in products))
+    
+    transform!(df_reg, :PARTNER_ISO => ByRow(x -> ifelse(x == treated, 1, 0)) => :d_TREATMENT) # dummy, treated country = 1
+    transform!(df_reg, :DATE => ByRow(x -> ifelse(x in post_treatment, 1, 0)) => :d_POST) # dummy, post-treatment period = 1
+
+    # data for standard deviation regression
+    cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW", "PRODUCT_NC", "d_POST"] # lose PERIOD
+    gdf = groupby(df_reg, cols_grouping)
+    df_reg_std = combine(gdf, [:YOY_VALUE, :YOY_QUANTITY, :YOY_PRICE] .=> std .=> [:STD_VALUE, :STD_QUANTITY, :STD_PRICE])
+    subset!(df_reg_std, [:STD_VALUE, :STD_QUANTITY, :STD_PRICE] .=> ByRow(x -> !isnan(x))) # take out NaN (from std calculation)
+    transform!(df_reg_std, :PARTNER_ISO => ByRow(x -> ifelse(x == treated, 1, 0)) => :d_TREATMENT) # dummy, treated country = 1
 
 
-prod_exports = common_products(df, "Verenigd Koninkrijk", ["Nederland", "Duitsland", "Frankrijk", "Italië"], [referendum], "exports", 12)
+    return df_reg, df_reg_std
 
-# prod_exports = common_products(df, "Verenigd Koninkrijk", ["Nederland", "Duitsland", "Frankrijk", "Italië"], [referendum], "exports", 12) # 2556
-# prod_exports = common_products(df, "Verenigd Koninkrijk", ["Nederland", "Duitsland", "Frankrijk", "Italië", "Verenigde Staten"], [referendum], "exports", 12) # 1452
-# prod_exports = common_products(df, "Verenigd Koninkrijk", ["Nederland", "Duitsland", "Frankrijk", "Italië", "Verenigde Staten", "China"], [referendum], "exports", 12) # 861
+end
+
 
 # ------------
-# prepare data for regression
+# play with some partners
 
-brexit = referendum
-interval = 12
-pre_treatment = brexit-Month(1)-Month(interval):Month(1):brexit-Month(1)
-post_treatment = brexit:Month(1):brexit+Month(interval)
+eurozone = ["Griekenland", "Oostenrijk", "Duitsland", "Spanje", "Slovakije", "Italië", "Nederland", "Frankrijk", "Letland", "Cyprus", "Malta", "Litouwen",
+            "Slovenië", "Estland", "Portugal", "Finland", "Luxemburg", "Ierland", "België"]
+not_eurozone = ["Roemenië", "Polen", "Hongarije", "Kroatië", "Tsjechië", "Zweden", "Denemarken", "Bulgarije"]
+not_EU = ["Verenigde Staten", "Canada", "China", "Zwitserland", "Noorwegen", "Rusland"]
 
-df_exports = subset(df, :PARTNER_ISO => ByRow(x -> x in ["Verenigd Koninkrijk", "Nederland", "Duitsland"]), :FLOW => ByRow(x -> x == "exports"), 
-                        :DATE => ByRow(x -> x in [pre_treatment; post_treatment]), :PRODUCT_NC => ByRow(x -> x in prod_exports))
-transform!(df_exports, :PARTNER_ISO => ByRow(x -> ifelse(x == "Verenigd Koninkrijk", 1, 0)) => :d_TREATMENT)
-transform!(df_exports, :DATE => ByRow(x -> ifelse(x in post_treatment, 1, 0)) => :d_POST)
+partners = ["Nederland", "Duitsland", "Frankrijk"]
+partners = ["Nederland", "Duitsland", "Frankrijk", "Italië"]
+partners = ["Nederland", "Duitsland", "Frankrijk", "Italië", "Verenigde Staten"]
+partners = copy(EU27)
+partners = copy(eurozone)
+partners = ["Nederland", "Duitsland", "Frankrijk", "Denemarken", "Verenigde Staten"]
 
-cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW", "PRODUCT_NC", "d_POST"]
-gdf = groupby(df_exports, cols_grouping)
-df_reg_std = combine(gdf, [:YOY_VALUE, :YOY_QUANTITY, :YOY_PRICE] .=> std .=> [:STD_VALUE, :STD_QUANTITY, :STD_PRICE])
-subset!(df_reg_std, [:STD_VALUE, :STD_QUANTITY, :STD_PRICE] .=> ByRow(x -> !isnan(x)))
-transform!(df_reg_std, :PARTNER_ISO => ByRow(x -> ifelse(x == "Verenigd Koninkrijk", 1, 0)) => :d_TREATMENT)
+# ------------
+# Setup
+
+# Brexit dates
+referendum = Date(2016, 07, 01)
+exit = Date(2020, 02, 01)
+trade = Date(2021, 05, 01)
+brexit_dates = [referendum; exit; trade]
+
+treated = "Verenigd Koninkrijk" # treated group
+control = copy(partners) # control group
+flow = "exports"
+interval = 12 # 12 months before and after brexit scenario
+
+
+prod_exports = common_products(df, treated, control, brexit_dates, flow, interval)
+
+df_reg, df_reg_std = data_reg(df, treated, control, referendum, flow, interval, prod_exports)
 
 
 # ------------
 # Regression
+
 using FixedEffectModels, RegressionTables
 
 # YOY monthly log difference
-reg_VALUE = FixedEffectModels.reg(df_exports, @formula(YOY_VALUE ~ d_TREATMENT&d_POST + fe(PARTNER_ISO) + fe(PRODUCT_NC)&fe(PERIOD)), Vcov.cluster(:PARTNER_ISO), save=true)
-reg_QUANTITY = FixedEffectModels.reg(df_exports, @formula(YOY_QUANTITY ~ d_TREATMENT&d_POST + fe(PARTNER_ISO) + fe(PRODUCT_NC)&fe(PERIOD)), Vcov.cluster(:PARTNER_ISO), save=true)
-reg_PRICE = FixedEffectModels.reg(df_exports, @formula(YOY_PRICE ~ d_TREATMENT&d_POST + fe(PARTNER_ISO) + fe(PRODUCT_NC)&fe(PERIOD)), Vcov.cluster(:PARTNER_ISO), save=true)
+reg_VALUE = FixedEffectModels.reg(df_reg, @formula(YOY_VALUE ~ d_TREATMENT&d_POST + fe(PARTNER_ISO) + fe(PRODUCT_NC)&fe(PERIOD)), Vcov.cluster(:PARTNER_ISO), save=true)
+reg_QUANTITY = FixedEffectModels.reg(df_reg, @formula(YOY_QUANTITY ~ d_TREATMENT&d_POST + fe(PARTNER_ISO) + fe(PRODUCT_NC)&fe(PERIOD)), Vcov.cluster(:PARTNER_ISO), save=true)
+reg_PRICE = FixedEffectModels.reg(df_reg, @formula(YOY_PRICE ~ d_TREATMENT&d_POST + fe(PARTNER_ISO) + fe(PRODUCT_NC)&fe(PERIOD)), Vcov.cluster(:PARTNER_ISO), save=true)
 
 RegressionTables.regtable(reg_VALUE, reg_QUANTITY, reg_PRICE ; renderSettings = asciiOutput(), 
     regression_statistics=[:nobs, :r2], print_fe_section=true, estimformat="%0.4f")
@@ -193,3 +221,10 @@ reg_STD_PRICE = FixedEffectModels.reg(df_reg_std, @formula(STD_PRICE ~ d_TREATME
 
 RegressionTables.regtable(reg_STD_VALUE, reg_STD_QUANTITY, reg_STD_PRICE ; renderSettings = asciiOutput(), 
     regression_statistics=[:nobs, :r2], print_fe_section=true, estimformat="%0.4f")
+
+
+
+
+
+
+

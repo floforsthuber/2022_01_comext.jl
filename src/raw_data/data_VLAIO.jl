@@ -63,3 +63,21 @@ end
 CSV.write(dir_dropbox * "rawdata/" * "df_VLAIO" * ".csv", df_VLAIO)
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+# # english names
+
+# df_VLAIO = CSV.read(dir_dropbox * "rawdata/" * "df_VLAIO" * ".csv", DataFrame)
+# transform!(df_VLAIO, ["PRODUCT_NC", "PRODUCT_NC_LAB1", "PRODUCT_NC_LAB2", "DECLARANT_ISO", "TRADE_TYPE", "PARTNER_ISO", "FLOW"] .=> ByRow(string), renamecols=false)
+# transform!(df_VLAIO, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] .=> ByRow(x -> convert(Union{Missing, Float64}, x)), renamecols=false)
+# df_VLAIO.PRODUCT_NC = lpad.(string.(df_VLAIO.PRODUCT_NC), 8, '0') # needs to be done again
+# df_VLAIO.PARTNER_ISO .= "VL"
+
+# df_names = DataFrame(XLSX.readtable(dir_home * "ctry_english_dutch" * ".xlsx", "Sheet1")...)
+# transform!(df_ctry, names(df_ctry) .=> ByRow(string), renamecols=false)
+# rename!(df_ctry, :lab_dutch => :PARTNER_ISO)
+
+# df_VLAIO = leftjoin(df_VLAIO, df_names, on=:PARTNER_ISO)
+
+# CSV.write(dir_dropbox * "rawdata/" * "df_VLAIO" * ".csv", df_VLAIO)
+
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
