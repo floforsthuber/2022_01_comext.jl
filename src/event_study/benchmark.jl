@@ -23,7 +23,7 @@ transform!(df_VLAIO, ["PRODUCT_NC", "PRODUCT_NC_LAB1", "PRODUCT_NC_LAB2", "DECLA
 transform!(df_VLAIO, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] .=> ByRow(x -> convert(Union{Missing, Float64}, x)), renamecols=false)
 
 # remove missings
-df_VLAIO.PRODUCT_NC = lpad.(string.(df_VLAIO.PRODUCT_NC), 8, '0')
+df_VLAIO.PRODUCT_NC = lpad.(string.(df_VLAIO.PRODUCT_NC), 8, '0') # needs to be done again
 subset!(df_VLAIO, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] .=> ByRow(x -> !ismissing(x))) # lose 1-16027346/21667553 ~26% observations
 
 # MAD adjustment
@@ -92,7 +92,7 @@ function yoy_change(period::AbstractVector, input::AbstractVector)
     return V
 end
 
-# compute 
+# compute YOY monthly log difference
 cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "PRODUCT_NC", "FLOW"]
 gdf = groupby(df_VLAIO, cols_grouping)
 df = transform(gdf, [:PERIOD, :VALUE_IN_EUROS] => yoy_change => :YOY_VALUE, [:PERIOD, :QUANTITY_IN_KG] => yoy_change => :YOY_QUANTITY,
@@ -100,50 +100,96 @@ df = transform(gdf, [:PERIOD, :VALUE_IN_EUROS] => yoy_change => :YOY_VALUE, [:PE
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-# EXAMPLE with GB, NL, DE
+# EXAMPLE with GB, NL, DE, FR
 
+# DATE format for subsetting
 transform!(df, :PERIOD => ByRow(x -> Date(string(x), DateFormat("yyyymm"))) => :DATE)
 
-# treatment period
-t_pre = Date(2015,7,1):Month(1):Date(2016,6,1)
-t_post = Date(2016,7,1):Month(1):Date(2017,7,1)
-
-# subsetting
+# drop missing 
 subset!(df, :YOY_PRICE => ByRow(x -> !ismissing(x)))
 
-# example with GB and NL and exports
-subset!(df, :PARTNER_ISO => ByRow(x -> x in ["Nederland", "Verenigd Koninkrijk", "Duitsland"]), :DATE => ByRow(x -> x in [t_pre; t_post]))
+# Brexit dates
+referendum = Date(2016, 07, 01)
+exit = Date(2020, 02, 01)
+trade = Date(2021, 05, 01)
+brexit_dates = [referendum; exit; trade]
 
-# common products
-#   - products which are exported to both GB and NL in pre-treatment period
-prod_GB = unique(subset(df, :PARTNER_ISO => ByRow(x -> x == "Verenigd Koninkrijk"), :FLOW => ByRow(x -> x == "exports"), :DATE => ByRow(x -> x in t_pre)).PRODUCT_NC)
-prod_NL = unique(subset(df, :PARTNER_ISO => ByRow(x -> x == "Nederland"), :FLOW => ByRow(x -> x == "exports"), :DATE => ByRow(x -> x in t_pre)).PRODUCT_NC)
-prod_DE = unique(subset(df, :PARTNER_ISO => ByRow(x -> x == "Duitsland"), :FLOW => ByRow(x -> x == "exports"), :DATE => ByRow(x -> x in t_pre)).PRODUCT_NC)
-prod = intersect(prod_GB, prod_NL, prod_DE)
-#   - products which are exported to both GB and NL in post-treatment period
-prod_GB = unique(subset(df, :PARTNER_ISO => ByRow(x -> x == "Verenigd Koninkrijk"), :FLOW => ByRow(x -> x == "exports"), :DATE => ByRow(x -> x in t_post)).PRODUCT_NC)
-prod_NL = unique(subset(df, :PARTNER_ISO => ByRow(x -> x == "Nederland"), :FLOW => ByRow(x -> x == "exports"), :DATE => ByRow(x -> x in t_post)).PRODUCT_NC)
-prod_DE = unique(subset(df, :PARTNER_ISO => ByRow(x -> x == "Duitsland"), :FLOW => ByRow(x -> x == "exports"), :DATE => ByRow(x -> x in t_post)).PRODUCT_NC)
-# products which are both exported to GB and NL and in both pre- and post-treatment period
-prod = intersect(prod, prod_GB, prod_NL, prod_DE)
+# function to find common products 
+function common_products(df::DataFrame, treated::String, control::Vector{String}, brexit_dates::Vector, flow::String, interval::Int64)
 
-subset!(df, :PRODUCT_NC => ByRow(x -> x in prod))
+    prod = unique(df.PRODUCT_NC) # initialize
 
-# dummies
-df.d_GB = ifelse.(df.PARTNER_ISO .== "Verenigd Koninkrijk", 1, 0)
-transform!(df, :DATE => ByRow(x -> ifelse(x in t_post, 1, 0)) => :d_POST)
-df.dummy = df.d_GB .* df.d_POST
+    for brexit in brexit_dates
+
+        for ctry in [treated; control]
+
+            # pre- and post-treatment time interval
+            pre_treatment = brexit-Month(1)-Month(interval):Month(1):brexit-Month(1)
+            post_treatment = brexit:Month(1):brexit+Month(interval)
+
+            # products pre- and post-treatment
+            prod_pre = unique(subset(df, :PARTNER_ISO => ByRow(x -> x == ctry), :FLOW => ByRow(x -> x == flow),
+                :DATE => ByRow(x -> x in pre_treatment)).PRODUCT_NC)
+            prod_post = unique(subset(df, :PARTNER_ISO => ByRow(x -> x == ctry), :FLOW => ByRow(x -> x == flow),
+                :DATE => ByRow(x -> x in post_treatment)).PRODUCT_NC)
+
+            # find and update intersection of product codes
+            prod = intersect(prod, prod_pre, prod_post)
+
+        end
+    end
+
+    return sort(prod)
+end
+
+prod_exports = common_products(df, "Verenigd Koninkrijk", ["Nederland", "Duitsland", "Frankrijk", "Italië"], brexit_dates, "exports", 12) # 1682
+prod_imports = common_products(df, "Verenigd Koninkrijk", ["Nederland", "Duitsland", "Frankrijk"], brexit_dates, "imports", 12)
 
 
+prod_exports = common_products(df, "Verenigd Koninkrijk", ["Nederland", "Duitsland", "Frankrijk", "Italië"], [referendum], "exports", 12)
+
+# prod_exports = common_products(df, "Verenigd Koninkrijk", ["Nederland", "Duitsland", "Frankrijk", "Italië"], [referendum], "exports", 12) # 2556
+# prod_exports = common_products(df, "Verenigd Koninkrijk", ["Nederland", "Duitsland", "Frankrijk", "Italië", "Verenigde Staten"], [referendum], "exports", 12) # 1452
+# prod_exports = common_products(df, "Verenigd Koninkrijk", ["Nederland", "Duitsland", "Frankrijk", "Italië", "Verenigde Staten", "China"], [referendum], "exports", 12) # 861
+
+# ------------
+# prepare data for regression
+
+brexit = referendum
+interval = 12
+pre_treatment = brexit-Month(1)-Month(interval):Month(1):brexit-Month(1)
+post_treatment = brexit:Month(1):brexit+Month(interval)
+
+df_exports = subset(df, :PARTNER_ISO => ByRow(x -> x in ["Verenigd Koninkrijk", "Nederland", "Duitsland"]), :FLOW => ByRow(x -> x == "exports"), 
+                        :DATE => ByRow(x -> x in [pre_treatment; post_treatment]), :PRODUCT_NC => ByRow(x -> x in prod_exports))
+transform!(df_exports, :PARTNER_ISO => ByRow(x -> ifelse(x == "Verenigd Koninkrijk", 1, 0)) => :d_TREATMENT)
+transform!(df_exports, :DATE => ByRow(x -> ifelse(x in post_treatment, 1, 0)) => :d_POST)
+
+cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW", "PRODUCT_NC", "d_POST"]
+gdf = groupby(df_exports, cols_grouping)
+df_reg_std = combine(gdf, [:YOY_VALUE, :YOY_QUANTITY, :YOY_PRICE] .=> std .=> [:STD_VALUE, :STD_QUANTITY, :STD_PRICE])
+subset!(df_reg_std, [:STD_VALUE, :STD_QUANTITY, :STD_PRICE] .=> ByRow(x -> !isnan(x)))
+transform!(df_reg_std, :PARTNER_ISO => ByRow(x -> ifelse(x == "Verenigd Koninkrijk", 1, 0)) => :d_TREATMENT)
 
 
-
+# ------------
+# Regression
 using FixedEffectModels, RegressionTables
 
-reg_VALUE = FixedEffectModels.reg(df, @formula(YOY_VALUE ~ dummy + fe(PARTNER_ISO) + fe(PRODUCT_NC)&fe(PERIOD)), Vcov.cluster(:PARTNER_ISO), save=true)
-reg_QUANTITY = FixedEffectModels.reg(df, @formula(YOY_QUANTITY ~ dummy + fe(PARTNER_ISO) + fe(PRODUCT_NC)&fe(PERIOD)), Vcov.cluster(:PARTNER_ISO), save=true)
-reg_PRICE = FixedEffectModels.reg(df, @formula(YOY_PRICE ~ dummy + fe(PARTNER_ISO) + fe(PRODUCT_NC)&fe(PERIOD)), Vcov.cluster(:PARTNER_ISO), save=true)
-
+# YOY monthly log difference
+reg_VALUE = FixedEffectModels.reg(df_exports, @formula(YOY_VALUE ~ d_TREATMENT&d_POST + fe(PARTNER_ISO) + fe(PRODUCT_NC)&fe(PERIOD)), Vcov.cluster(:PARTNER_ISO), save=true)
+reg_QUANTITY = FixedEffectModels.reg(df_exports, @formula(YOY_QUANTITY ~ d_TREATMENT&d_POST + fe(PARTNER_ISO) + fe(PRODUCT_NC)&fe(PERIOD)), Vcov.cluster(:PARTNER_ISO), save=true)
+reg_PRICE = FixedEffectModels.reg(df_exports, @formula(YOY_PRICE ~ d_TREATMENT&d_POST + fe(PARTNER_ISO) + fe(PRODUCT_NC)&fe(PERIOD)), Vcov.cluster(:PARTNER_ISO), save=true)
 
 RegressionTables.regtable(reg_VALUE, reg_QUANTITY, reg_PRICE ; renderSettings = asciiOutput(), 
+    regression_statistics=[:nobs, :r2], print_fe_section=true, estimformat="%0.4f")
+
+
+# STD of YOY monthly log difference
+#   - lose PERIOD dimension (just control for PRODUCT FE instead)
+reg_STD_VALUE = FixedEffectModels.reg(df_reg_std, @formula(STD_VALUE ~ d_TREATMENT&d_POST + fe(PARTNER_ISO) + fe(PRODUCT_NC)), Vcov.cluster(:PARTNER_ISO), save=true)
+reg_STD_QUANTITY = FixedEffectModels.reg(df_reg_std, @formula(STD_QUANTITY ~ d_TREATMENT&d_POST + fe(PARTNER_ISO) + fe(PRODUCT_NC)), Vcov.cluster(:PARTNER_ISO), save=true)
+reg_STD_PRICE = FixedEffectModels.reg(df_reg_std, @formula(STD_PRICE ~ d_TREATMENT&d_POST + fe(PARTNER_ISO) + fe(PRODUCT_NC)), Vcov.cluster(:PARTNER_ISO), save=true)
+
+RegressionTables.regtable(reg_STD_VALUE, reg_STD_QUANTITY, reg_STD_PRICE ; renderSettings = asciiOutput(), 
     regression_statistics=[:nobs, :r2], print_fe_section=true, estimformat="%0.4f")
