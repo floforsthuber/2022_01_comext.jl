@@ -212,7 +212,6 @@ function HP(x::AbstractArray, λ::Int64)
     return (I + λ * D * D') \ x
 end
 
-
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 # Functions for creating data for figures
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -309,7 +308,7 @@ function data_fig3(df::DataFrame, declarants::Vector{String}, partners::Vector{S
 end
 
 
-# function to create data for table 1
+# function to create data for table 1 and 2
 function tab1(df::DataFrame, declarants::Vector{String}, partners::Vector{String}, digits::Int64)
 
     # clean df
@@ -331,3 +330,17 @@ function tab1(df::DataFrame, declarants::Vector{String}, partners::Vector{String
     return df
 end
 
+
+# function to create data for figure 5
+function fig5(df::DataFrame, declarants::Vector{String}, partners::Vector{String})
+
+    # clean df
+    subset!(df, :DECLARANT_ISO => ByRow(x -> x in declarants), :PARTNER_ISO => ByRow(x -> x in partners))
+    subset!(df, :PRODUCT_NC => ByRow(x -> x != "TOTAL")) # take out TOTAL
+
+    cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW", "PRODUCT_NC", "PERIOD"]
+    gdf = groupby(df, cols_grouping)
+    df = combine(gdf, n)
+
+    return df
+end

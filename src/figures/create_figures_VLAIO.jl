@@ -2,7 +2,7 @@
 # Script to compile data for some descriptive statistics
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-using DataFrames, CSV, XLSX, LinearAlgebra, Statistics, StatsBase, StatsPlots, Dates
+using DataFrames, CSV, XLSX, LinearAlgebra, Statistics, StatsBase, StatsPlots, Dates, Pipe
 
 # other scripts
 dir_home = "x:/VIVES/1-Personal/Florian/git/2022_01_comext/src/"
@@ -21,8 +21,8 @@ df_VLAIO = CSV.read(dir_dropbox * "rawdata/" * "df_VLAIO" * ".csv", DataFrame)
 transform!(df_VLAIO, ["PRODUCT_NC", "PRODUCT_NC_LAB1", "PRODUCT_NC_LAB2", "DECLARANT_ISO", "TRADE_TYPE", "PARTNER_ISO", "FLOW"] .=> ByRow(string), renamecols=false)
 transform!(df_VLAIO, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] .=> ByRow(x -> convert(Union{Missing, Float64}, x)), renamecols=false)
 
-# take out EU/WORLD again for MAD adjustment
-subset!(df_VLAIO, :PARTNER_ISO => ByRow(x -> !(x in ["EU", "WORLD"])))
+# remove missings
+df_VLAIO.PRODUCT_NC = lpad.(string.(df_VLAIO.PRODUCT_NC), 8, '0') # needs to be done again
 subset!(df_VLAIO, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] .=> ByRow(x -> !ismissing(x))) # lose 1-16027346/21667553 ~26% observations
 
 # MAD adjustment
@@ -31,7 +31,7 @@ transform!(df_VLAIO, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] => ByRow((v,q) -> v/q) =
 gdf = groupby(df_VLAIO, "PRODUCT_NC")
 df_VLAIO = transform(gdf, :UNIT_PRICE => MAD_method => :MAD)
 subset!(df_VLAIO, :MAD => ByRow(x -> x < outlier_cutoff)) # lose further 1-13110297/16027346 ~18% observations (~40% of total)
-df_VLAIO = df_VLAIO[:, Not([:UNIT_PRICE, :MAD])]
+df_VLAIO = df_VLAIO[:, Not([:MAD, :UNIT_PRICE])]
 
 # add EU/WORLD again
 EU27 = ["Roemenië", "Griekenland", "Oostenrijk", "Polen", "Duitsland", "Spanje", "Hongarije", "Slovakije", "Italië", "Nederland",
@@ -76,6 +76,11 @@ df_VLAIO = append_EU(df_VLAIO, EU27)
 # double check if no zeros/missing introduced by WORLD/EU
 transform!(df_VLAIO, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] .=> ByRow(x -> ifelse(iszero(x) | ismissing(x), missing, x)), renamecols=false)
 subset!(df_VLAIO, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] .=> ByRow(x -> !ismissing(x))) # lose 1-15228494/15228494 ~0% observations
+
+cols_subset = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW", "PERIOD", "PRODUCT_NC", "VALUE_IN_EUROS", "QUANTITY_IN_KG"]
+df_VLAIO = df_VLAIO[:, cols_subset]
+sort!(df_VLAIO, :PERIOD)
+
 
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 # Figure 1
@@ -125,8 +130,8 @@ for flow in ["imports", "exports"]
     # values
     # Notes:
     #   - take out EU for scale
-    p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PARTNER_ISO => ByRow(x -> x != "EU")) plot(:DATE, :VALUE_IN_EUROS,
-            group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="euros", title="Flemish "* flow*": values")
+    p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PARTNER_ISO => ByRow(x -> x != "EU")) plot(:DATE, :VALUE_IN_EUROS/1_000_000_000,
+            group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="euros (billion)", title="Flemish "* flow*": values")
     vline!([Date(2016,6,23)], label="vote", color=:black, lw=1, ls=:solid) # refer
     vline!([Date(2020,01,31)], label="exit", color=:black, lw=1, ls=:dash) # exit
     vline!([Date(2020,12,31)], label="trans end", color=:black, lw=1.5, ls=:dot) # trans end
@@ -165,8 +170,8 @@ for flow in ["imports", "exports"]
     # values
     # Notes:
     #   - take out EU for scale
-    p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PARTNER_ISO => ByRow(x -> x != "EU")) plot(:DATE, :VALUE_IN_EUROS_HP,
-            group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="euros", title="Flemish "*flow*": values (HP, λ=$λ)")
+    p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PARTNER_ISO => ByRow(x -> x != "EU")) plot(:DATE, :VALUE_IN_EUROS_HP/1e9,
+            group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="euros (billion)", title="Flemish "*flow*": values (HP, λ=$λ)")
     vline!([Date(2016,6,23)], label="vote", color=:black, lw=1, ls=:solid) # refer
     vline!([Date(2020,01,31)], label="exit", color=:black, lw=1, ls=:dash) # exit
     vline!([Date(2020,12,31)], label="trans end", color=:black, lw=1.5, ls=:dot) # trans end
@@ -267,7 +272,9 @@ transform!(df, :PERIOD => ByRow(x -> Date(string(x), DateFormat("yyyymm"))) => :
 λ = 20
 cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW", "PRODUCT_NC_digits"]
 gdf = groupby(df, cols_grouping)
-transform!(gdf, [:VALUE_IN_EUROS, :QUANTITY_IN_KG, :PRICE_INDEX] .=> (x -> HP(x, λ)) .=> [:VALUE_IN_EUROS_HP, :QUANTITY_IN_KG_HP, :PRICE_INDEX_HP])
+df = combine(gdf, x -> nrow(x) < 3 ? DataFrame() : x) # remove groups with only two observations otherwise we cannot apply HP filter
+gdf = groupby(df, cols_grouping)
+df = transform(gdf, [:VALUE_IN_EUROS, :QUANTITY_IN_KG, :PRICE_INDEX] .=> (x -> HP(x, λ)) .=> [:VALUE_IN_EUROS_HP, :QUANTITY_IN_KG_HP, :PRICE_INDEX_HP])
 
 # create unweighted unit prices
 transform!(df, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] => ByRow((v,q) -> v/q) => :UNIT_PRICE)
@@ -275,14 +282,13 @@ transform!(df, [:VALUE_IN_EUROS_HP, :QUANTITY_IN_KG_HP] => ByRow((v,q) -> v/q) =
 
 # plotting
 # subsetting products for figures
-sort!(df, :DATE) # for some reason needed to have correct DATE axis
-products = 7:8:89
+sort!(df) # for some reason needed to have correct DATE axis
+products = 1:8:89
 
 for flow in ["imports", "exports"]
     for i in products
     
-    product_range = string.(i:i+7)
-    end_range = string(product_range[end])
+    product_range = lpad.(i:i+6,2,'0')
     
     # values
     p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PRODUCT_NC_digits => ByRow(x -> x in product_range)) plot(:DATE, :VALUE_IN_EUROS,
@@ -290,7 +296,7 @@ for flow in ["imports", "exports"]
         vline!([Date(2016,6,23)], label="vote", color=:black, lw=1, ls=:solid) # refer
         vline!([Date(2020,01,31)], label="exit", color=:black, lw=1, ls=:dash) # exit
         vline!([Date(2020,12,31)], label="trans end", color=:black, lw=1.5, ls=:dot) # trans end
-    savefig(p, dir_dropbox * "results/images/VLAIO/fig2/values/" * "fig2_" * flow * "_" * end_range * "_values" * ".png") # export image
+    savefig(p, dir_dropbox * "results/images/VLAIO/fig2/values/" * "fig2_" * flow * "_" * product_range[1] * "_" * product_range[end] * "_values" * ".png") # export image
 
     # price index (weighted unit prices)
     p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PRODUCT_NC_digits => ByRow(x -> x in product_range)) plot(:DATE, :PRICE_INDEX,
@@ -298,7 +304,7 @@ for flow in ["imports", "exports"]
         vline!([Date(2016,6,23)], label="vote", color=:black, lw=1, ls=:solid) # refer
         vline!([Date(2020,01,31)], label="exit", color=:black, lw=1, ls=:dash) # exit
         vline!([Date(2020,12,31)], label="trans end", color=:black, lw=1.5, ls=:dot) # trans end
-    savefig(p, dir_dropbox * "results/images/VLAIO/fig2/prices_weighted/" * "fig2_" * flow * "_" * end_range * "_prices_weighted" * ".png")
+    savefig(p, dir_dropbox * "results/images/VLAIO/fig2/prices_weighted/" * "fig2_" * flow * "_" * product_range[1] * "_" * product_range[end] * "_prices_weighted" * ".png")
 
     # price index (unweighted unit prices)
     p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PRODUCT_NC_digits => ByRow(x -> x in product_range)) plot(:DATE, :UNIT_PRICE,
@@ -306,7 +312,7 @@ for flow in ["imports", "exports"]
         vline!([Date(2016,6,23)], label="vote", color=:black, lw=1, ls=:solid) # refer
         vline!([Date(2020,01,31)], label="exit", color=:black, lw=1, ls=:dash) # exit
         vline!([Date(2020,12,31)], label="trans end", color=:black, lw=1.5, ls=:dot) # trans end
-    savefig(p, dir_dropbox * "results/images/VLAIO/fig2/prices_unweighted/" * "fig2_" * flow * "_" * end_range * "_prices_unweighted" * ".png") 
+    savefig(p, dir_dropbox * "results/images/VLAIO/fig2/prices_unweighted/" * "fig2_" * flow * "_" * product_range[1] * "_" * product_range[end] * "_prices_unweighted" * ".png") 
 
     end
 end
@@ -314,16 +320,15 @@ end
 for flow in ["imports", "exports"]
     for i in products
     
-    product_range = string.(i:i+7)
-    end_range = string(product_range[end])
+    product_range = lpad.(i:i+6,2,'0')
     
     # values
-    p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PRODUCT_NC_digits => ByRow(x -> x in product_range)) plot(:DATE, :VALUE_IN_EUROS_HP,
-            group=:PRODUCT_NC_digits, lw=2, legend=:bottomleft, ylabel="euros", title="Flemish "*flow*": values (HP, λ=$λ)")
+    p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PRODUCT_NC_digits => ByRow(x -> x in product_range)) plot(:DATE, :VALUE_IN_EUROS_HP/1e6,
+            group=:PRODUCT_NC_digits, lw=2, legend=:bottomleft, ylabel="euros (million)", title="Flemish "*flow*": values (HP, λ=$λ)")
         vline!([Date(2016,6,23)], label="vote", color=:black, lw=1, ls=:solid) # refer
         vline!([Date(2020,01,31)], label="exit", color=:black, lw=1, ls=:dash) # exit
         vline!([Date(2020,12,31)], label="trans end", color=:black, lw=1.5, ls=:dot) # trans end
-    savefig(p, dir_dropbox * "results/images/VLAIO/fig2/HP/values/" * "fig2_" * flow * "_" * end_range * "_values" * "_HP" * ".png") # export image
+    savefig(p, dir_dropbox * "results/images/VLAIO/fig2/HP/values/" * flow * "/" * "fig2_" * flow * "_" * product_range[1] * "_" * product_range[end] * "_values" * "_HP" * ".png") # export image
 
     # price index (weighted unit prices)
     p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PRODUCT_NC_digits => ByRow(x -> x in product_range)) plot(:DATE, :PRICE_INDEX_HP,
@@ -331,7 +336,7 @@ for flow in ["imports", "exports"]
         vline!([Date(2016,6,23)], label="vote", color=:black, lw=1, ls=:solid) # refer
         vline!([Date(2020,01,31)], label="exit", color=:black, lw=1, ls=:dash) # exit
         vline!([Date(2020,12,31)], label="trans end", color=:black, lw=1.5, ls=:dot) # trans end
-    savefig(p, dir_dropbox * "results/images/VLAIO/fig2/HP/prices_weighted/" * "fig2_" * flow * "_" * end_range * "_prices_weighted" * "_HP" * ".png")
+    savefig(p, dir_dropbox * "results/images/VLAIO/fig2/HP/prices_weighted/" * "fig2_" * flow * "_" * product_range[1] * "_" * product_range[end] * "_prices_weighted" * "_HP" * ".png")
 
     # price index (unweighted unit prices)
     p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PRODUCT_NC_digits => ByRow(x -> x in product_range)) plot(:DATE, :UNIT_PRICE_HP,
@@ -339,7 +344,7 @@ for flow in ["imports", "exports"]
         vline!([Date(2016,6,23)], label="vote", color=:black, lw=1, ls=:solid) # refer
         vline!([Date(2020,01,31)], label="exit", color=:black, lw=1, ls=:dash) # exit
         vline!([Date(2020,12,31)], label="trans end", color=:black, lw=1.5, ls=:dot) # trans end
-    savefig(p, dir_dropbox * "results/images/VLAIO/fig2/HP/prices_unweighted/" * "fig2_" * flow * "_" * end_range * "_prices_unweighted" * "_HP" * ".png") 
+    savefig(p, dir_dropbox * "results/images/VLAIO/fig2/HP/prices_unweighted/" * "fig2_" * flow * "_" * product_range[1] * "_" * product_range[end] * "_prices_unweighted" * "_HP" * ".png") 
 
     end
 end
@@ -371,7 +376,7 @@ df = data_fig3(df_VLAIO, ["Vlaanderen"], partners)
 transform!(df, :PERIOD => ByRow(x -> Date(string(x), DateFormat("yyyymm"))) => :DATE)
 
 # HP filter
-λ = 10
+λ = 20
 cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW"]
 gdf = groupby(df, cols_grouping)
 transform!(gdf, [:VALUE_SHARE, :QUANTITY_SHARE] .=> (x -> HP(x, λ)) .=> [:VALUE_SHARE_HP, :QUANTITY_SHARE_HP])
@@ -427,3 +432,133 @@ p = @df subset(df, :PARTNER_ISO => ByRow(x -> x == "Verenigd Koninkrijk")) plot(
     vline!([Date(2020,01,31)], label="exit", color=:black, lw=1, ls=:dash) # exit
     vline!([Date(2020,12,31)], label="trans end", color=:black, lw=1.5, ls=:dot) # trans end
 savefig(p, dir_dropbox * "results/images/VLAIO/fig3/HP/" * "fig3_" * "VLA_GB" * "_value_share" * "_HP" * ".png") # export image
+
+
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Table 1
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+partners = ["Verenigd Koninkrijk", "EU", "Duitsland", "Nederland", "Frankrijk"]
+df = tab1(df_VLAIO, ["Vlaanderen"], partners, 2)
+
+# aggregate to yearly data
+transform!(df, :PERIOD => ByRow(x -> string(x)[1:4]) => :YEAR)
+cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW", "PRODUCT_NC_digits", "YEAR"]
+gdf = groupby(df, cols_grouping)
+df = combine(gdf, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] .=> sum, renamecols=false)
+
+df_join = leftjoin(subset(df, :PARTNER_ISO => ByRow(x -> x != "WORLD")), 
+                    subset(df, :PARTNER_ISO => ByRow(x -> x == "WORLD")), on=[:DECLARANT_ISO, :FLOW, :PRODUCT_NC_digits, :YEAR], makeunique=true)
+
+transform!(df_join, [:VALUE_IN_EUROS, :VALUE_IN_EUROS_1] => ByRow((x,s) -> x/s) => :SHARE_VALUE)
+transform!(df_join, [:QUANTITY_IN_KG, :QUANTITY_IN_KG_1] => ByRow((x,s) -> x/s) => :SHARE_QUANTITY)
+
+cols_name = ["VALUE_PARTNER", "QUANTITY_PARTNER", "VALUE_WORLD", "QUANTITY_WORLD"]
+rename!(df_join, [:VALUE_IN_EUROS, :QUANTITY_IN_KG, :VALUE_IN_EUROS_1, :QUANTITY_IN_KG_1] .=> cols_name)
+cols_name = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW", "PRODUCT_NC_digits", "YEAR", "VALUE_PARTNER", "QUANTITY_PARTNER", "VALUE_WORLD", "QUANTITY_WORLD", "SHARE_VALUE", "SHARE_QUANTITY"]
+df = df_join[:, cols_name]
+
+# ----------------
+
+df_tab1 = subset(df, :PARTNER_ISO => ByRow(x -> x == "Verenigd Koninkrijk"))
+cols_name = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW", "PRODUCT_NC_digits", "YEAR", "SHARE_VALUE"]
+df_tab1 = df_tab1[:, cols_name]
+
+# # only keep top 10
+# df_tab1 = @pipe df_tab1 |>
+#     groupby(_, cols_grouping) |>
+#     combine(_) do sdf
+#         sorted = sort(sdf, order(:SHARE_VALUE, rev=true))
+#         first(sorted, 10)
+#     end
+
+sort!(df_tab1)
+transform!(df_tab1, :SHARE_VALUE => ByRow(x -> round(x*100, digits=2)), renamecols=false)
+df_tab1_wide = unstack(df_tab1, :YEAR, :SHARE_VALUE)
+    
+XLSX.writetable(dir_dropbox * "results/images/VLAIO/tab/" * "table1_within_prod_importance" * ".xlsx", df_tab1_wide, overwrite=true)
+
+
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Table 2
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+partners = ["Verenigd Koninkrijk", "EU", "Duitsland", "Nederland", "Frankrijk"]
+df = tab1(df_VLAIO, ["Vlaanderen"], partners, 2)
+
+# aggregate to yearly data
+transform!(df, :PERIOD => ByRow(x -> string(x)[1:4]) => :YEAR)
+cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW", "PRODUCT_NC_digits", "YEAR"]
+gdf = groupby(df, cols_grouping)
+df = combine(gdf, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] .=> sum, renamecols=false)
+
+# create total world exports/imports per year
+df_WORLD = subset(df, :PARTNER_ISO => ByRow(x -> x == "WORLD"))
+cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW", "YEAR"]
+gdf = groupby(df_WORLD, cols_grouping)
+df_WORLD = combine(gdf, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] .=> sum .=> [:VALUE_WORLD, :QUANTITY_WORLD])
+
+df_join = leftjoin(subset(df, :PARTNER_ISO => ByRow(x -> x != "WORLD")), df_WORLD[:,Not(:PARTNER_ISO)], on=[:DECLARANT_ISO, :FLOW, :YEAR])
+
+transform!(df_join, [:VALUE_IN_EUROS, :VALUE_WORLD] => ByRow((x,s) -> x/s) => :SHARE_VALUE)
+transform!(df_join, [:QUANTITY_IN_KG, :QUANTITY_WORLD] => ByRow((x,s) -> x/s) => :SHARE_QUANTITY)
+
+
+
+# ----------------
+
+df_tab2 = subset(df_join, :PARTNER_ISO => ByRow(x -> x == "Verenigd Koninkrijk"))
+cols_name = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW", "PRODUCT_NC_digits", "YEAR", "SHARE_VALUE"]
+df_tab2 = df_tab2[:, cols_name]
+
+# # only keep top 10
+# df_tab2 = @pipe df_tab2 |>
+#     groupby(_, cols_grouping) |>
+#     combine(_) do sdf
+#         sorted = sort(sdf, order(:SHARE_VALUE, rev=true))
+#         first(sorted, 10)
+#     end
+
+sort!(df_tab2)
+transform!(df_tab2, :SHARE_VALUE => ByRow(x -> round(x*100, digits=2)), renamecols=false)
+
+df_tab2_wide = unstack(df_tab2, :YEAR, :SHARE_VALUE)
+
+XLSX.writetable(dir_dropbox * "results/images/VLAIO/tab/" * "table2_overall_prod_importance" * ".xlsx", df_tab2_wide, overwrite=true)
+
+
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Figure 5
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+# function to create data for figure 5
+function fig5(df::DataFrame, declarants::Vector{String}, partners::Vector{String})
+
+    # clean df
+    subset!(df, :DECLARANT_ISO => ByRow(x -> x in declarants), :PARTNER_ISO => ByRow(x -> x in partners))
+    subset!(df, :PRODUCT_NC => ByRow(x -> x != "TOTAL")) # take out TOTAL
+
+    cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW", "PERIOD"]
+    gdf = groupby(df, cols_grouping)
+    df = combine(gdf, nrow => :COUNT)
+
+    return df
+end
+
+
+partners = ["Verenigd Koninkrijk", "Duitsland", "Nederland", "Frankrijk"]
+df = fig5(df_VLAIO, ["Vlaanderen"], partners)
+transform!(df, :PERIOD => ByRow(x -> Date(string(x), DateFormat("yyyymm"))) => :DATE)
+
+
+for flow in ["imports", "exports"]
+
+    p = @df subset(df, :FLOW => ByRow(x -> x == flow)) plot(:DATE, :COUNT,
+            group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="number of products", title="Flemish "* flow*": number of products")
+    vline!([Date(2016,6,23)], label="vote", color=:black, lw=1, ls=:solid) # refer
+    vline!([Date(2020,01,31)], label="exit", color=:black, lw=1, ls=:dash) # exit
+    vline!([Date(2020,12,31)], label="trans end", color=:black, lw=1.5, ls=:dot) # trans end
+    savefig(p, dir_dropbox * "results/images/VLAIO/fig5/" * "fig5_" * flow * "_product_count" * ".png") # export image dropbox
+
+end
