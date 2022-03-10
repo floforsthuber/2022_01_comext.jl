@@ -130,7 +130,7 @@ for flow in ["imports", "exports"]
     # values
     # Notes:
     #   - take out EU for scale
-    p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PARTNER_ISO => ByRow(x -> x != "EU")) plot(:DATE, :VALUE_IN_EUROS/1_000_000_000,
+    p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PARTNER_ISO => ByRow(x -> x != "EU")) plot(:DATE, :VALUE_IN_EUROS/1e9,
             group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="euros (billion)", title="Flemish "* flow*": values")
     vline!([Date(2016,6,23)], label="vote", color=:black, lw=1, ls=:solid) # refer
     vline!([Date(2020,01,31)], label="exit", color=:black, lw=1, ls=:dash) # exit
@@ -369,6 +369,32 @@ end
 # produce data for plotting
 partners = ["Verenigd Koninkrijk", "EU", "Duitsland", "Nederland", "Frankrijk"]
 df = data_fig3(df_VLAIO, ["Vlaanderen"], partners)
+
+# function to create data for figure 3
+function data_fig3(df::DataFrame, declarants::Vector{String}, partners::Vector{String})
+    
+    # clean df
+    df = subset(df, :PRODUCT_NC => ByRow(x -> x != "TOTAL"), :DECLARANT_ISO => ByRow(x -> x in declarants),
+                    :PARTNER_ISO => ByRow(x -> x in [partners; "WORLD"])) # take out TOTAL
+
+    cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW", "PERIOD"]
+    gdf = groupby(df, cols_grouping)
+    df = combine(gdf, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] .=> sum, renamecols=false)
+
+    df_join = leftjoin(subset(df, :PARTNER_ISO => ByRow(x -> x != "WORLD")), 
+                    subset(df, :PARTNER_ISO => ByRow(x -> x == "WORLD")), on=[:DECLARANT_ISO, :FLOW, :PERIOD], makeunique=true)
+
+    transform!(df_join, [:VALUE_IN_EUROS, :VALUE_IN_EUROS_1] => ByRow((x,s) -> x/s*100) => :VALUE_SHARE)
+    transform!(df_join, [:QUANTITY_IN_KG, :QUANTITY_IN_KG_1] => ByRow((x,s) -> x/s*100) => :QUANTITY_SHARE)
+
+    cols_name = ["VALUE_PARTNER", "QUANTITY_PARTNER", "VALUE_WORLD", "QUANTITY_WORLD"]
+    rename!(df_join, [:VALUE_IN_EUROS, :QUANTITY_IN_KG, :VALUE_IN_EUROS_1, :QUANTITY_IN_KG_1] .=> cols_name)
+
+    return df_join
+end
+
+df = data_fig3(df_VLAIO, ["Vlaanderen"], partners)
+
 
 # ------------------
 
