@@ -468,7 +468,10 @@ end
 
 
 # ------------
+# standard deviation of y-on-y growth
+# ------------
 
+# table
 referendum = Date(2016, 07, 01)
 brexit = Date(2020, 02, 01)
 trade = Date(2021, 05, 01)
@@ -484,4 +487,65 @@ tab_std = combine(gdf, :YOY_VALUE => std => :STD_VALUE)
 tab_std_wide = unstack(tab_std, :BREXIT, :STD_VALUE)
 sort!(tab_std_wide, :FLOW)
 
-XLSX.writetable(dir_dropbox * "results/images/VLAIO/summary_stats/" * "table3_std" * ".xlsx", tab_std_wide, overwrite=true)
+# XLSX.writetable(dir_dropbox * "results/images/VLAIO/summary_stats/" * "table3_std" * ".xlsx", tab_std_wide, overwrite=true)
+
+
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Figure 7
+# STD of y-on-y monthly growth rates
+# -------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+df = copy(df_VLAIO)
+partners = ["Verenigd Koninkrijk", "Duitsland", "Nederland", "Frankrijk"]
+subset!(df, :DECLARANT_ISO => ByRow(x -> x == "Vlaanderen"), :PARTNER_ISO => ByRow(x -> x in partners))
+
+# aggregate over products
+cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW", "PERIOD"]
+gdf = groupby(df, cols_grouping)
+df = combine(gdf, :VALUE_IN_EUROS => sum, renamecols=false)
+
+# compute YOY monthly percentage change
+cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW"]
+gdf = groupby(df, cols_grouping)
+df = transform(gdf, [:PERIOD, :VALUE_IN_EUROS] => yoy_change => :YOY_VALUE)
+
+# # ------------
+
+# # MAD adjustment
+# #   - need to drop missing
+# outlier_cutoff = 4
+# gdf = groupby(subset(df, :YOY_VALUE => ByRow(x -> !ismissing(x))), "PRODUCT_NC_digits")
+# df = transform(gdf, :YOY_VALUE => MAD_method => :MAD)
+# subset!(df, :MAD => ByRow(x -> x < outlier_cutoff))
+# df = df[:, Not(:MAD)]
+
+# # ------------
+
+# Date
+transform!(df, :PERIOD => ByRow(x -> Date(string(x), DateFormat("yyyymm"))) => :DATE)
+sort!(df)
+
+# HP filter
+subset!(df, :YOY_VALUE => ByRow(x -> !ismissing(x))) # need to drop missing
+λ = 20
+cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW"]
+gdf = groupby(df, cols_grouping)
+df = transform(gdf, :YOY_VALUE => (x -> HP(x, λ)) => :YOY_VALUE_HP)
+
+# std
+cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW"]
+gdf = groupby(df, cols_grouping)
+df = transform(gdf, [:YOY_VALUE, :YOY_VALUE_HP] .=> (x -> rolling_std(x, 6)) .=> [:STD_YOY, :STD_YOY_HP])
+
+
+for flow in ["imports", "exports"]
+
+    # YOY HP
+    p = @df subset(df, :FLOW => ByRow(x -> x == flow)) plot(:DATE, :STD_YOY_HP,
+            group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="percentages", title="Flemish "*flow*" : 6 months STD \n (YOY change, λ=$λ)")
+    vline!([Date(2016,6,23)], label="vote", color=:black, lw=1, ls=:solid) # refer
+    vline!([Date(2020,01,31)], label="exit", color=:black, lw=1, ls=:dash) # exit
+    vline!([Date(2020,12,31)], label="trans end", color=:black, lw=1.5, ls=:dot) # trans end
+    savefig(p, dir_dropbox * "results/images/VLAIO/summary_stats/" * "fig7_" * flow * "_YOY" * "_STD" * ".png") # export image dropbox
+
+end

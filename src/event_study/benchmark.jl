@@ -134,6 +134,9 @@ function common_products(df::DataFrame, treated::String, control::Vector{String}
         end
     end
 
+    n_prod = length(prod)
+    println("\n ✓ $n_prod common products are traded between $treated and $control")
+
     return sort(prod)
 end
 
@@ -183,15 +186,21 @@ partners = ["Nederland", "Duitsland", "Frankrijk", "Denemarken", "Verenigde Stat
 # Setup
 
 # Brexit dates
-referendum = Date(2016, 07, 01)
-exit = Date(2020, 02, 01)
-trade = Date(2021, 05, 01)
+referendum = Date(2016, 07, 01) # referendum to leave the EU, Date(2016, 06, 23)
+exit = Date(2020, 02, 01) # formal exit of GB from the EU, Date(2020,01,31)
+trade = Date(2021, 05, 01) # Trade and Cooperation Agreement becomes effective, Date(2021,04,27)
 brexit_dates = [referendum; exit; trade]
 
 treated = "Verenigd Koninkrijk" # treated group
 control = copy(partners) # control group
 flow = "exports"
-interval = 12 # 12 months before and after brexit scenario
+interval = 12 # 12 months before and after brexit scenarios
+
+# # placebo
+# treated = "Italië" # treated group
+# control = ["Duitsland", "Nederland", "Frankrijk"] # control group
+# flow = "exports"
+# interval = 12 # 12 months before and after brexit scenarios
 
 
 prod_exports = common_products(df, treated, control, brexit_dates, flow, interval)
@@ -221,10 +230,5 @@ reg_STD_PRICE = FixedEffectModels.reg(df_reg_std, @formula(STD_PRICE ~ d_TREATME
 
 RegressionTables.regtable(reg_STD_VALUE, reg_STD_QUANTITY, reg_STD_PRICE ; renderSettings = asciiOutput(), 
     regression_statistics=[:nobs, :r2], print_fe_section=true, estimformat="%0.4f")
-
-
-
-
-
 
 
