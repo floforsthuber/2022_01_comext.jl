@@ -93,7 +93,7 @@ df_VLAIO = df_VLAIO[:, cols_subset]
 
 # prepare data
 df = copy(df_VLAIO)
-partners = ["Verenigd Koninkrijk", "EU", "Duitsland", "Nederland", "Frankrijk"]
+partners = ["Verenigd Koninkrijk", "EU", "Duitsland", "Nederland", "Frankrijk", "Italië"]
 subset!(df, :DECLARANT_ISO => ByRow(x -> x == "Vlaanderen"), :PARTNER_ISO => ByRow(x -> x in partners))
 cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW", "PERIOD"]
 gdf = groupby(df, cols_grouping)
@@ -128,7 +128,7 @@ for flow in ["imports", "exports"]
 
     # values
     p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PARTNER_ISO => ByRow(x -> x != "EU")) plot(:DATE, :VALUE_IN_EUROS/1e9,
-    group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="euros (billion)", title="Flemish "* flow*": values")
+    group=:PARTNER_ISO, lw=2, legend=:topleft, ylabel="euros (billion)", title="Flemish "* flow*": values")
     vline!([Date(2016,6,23)], label="vote", color=:black, lw=1, ls=:solid) # refer
     vline!([Date(2020,01,31)], label="exit", color=:black, lw=1, ls=:dash) # exit
     vline!([Date(2020,12,31)], label="trans end", color=:black, lw=1.5, ls=:dot) # trans end
@@ -136,7 +136,7 @@ for flow in ["imports", "exports"]
 
     # HP
     p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PARTNER_ISO => ByRow(x -> x != "EU")) plot(:DATE, :VALUE_IN_EUROS_HP/1e9,
-            group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="euros (billion)", title="Flemish "*flow*": values (HP, λ=$λ)")
+            group=:PARTNER_ISO, lw=2, legend=:topleft, ylabel="euros (billion)", title="Flemish "*flow*": values (HP, λ=$λ)")
     vline!([Date(2016,6,23)], label="vote", color=:black, lw=1, ls=:solid) # refer
     vline!([Date(2020,01,31)], label="exit", color=:black, lw=1, ls=:dash) # exit
     vline!([Date(2020,12,31)], label="trans end", color=:black, lw=1.5, ls=:dot) # trans end
@@ -144,18 +144,27 @@ for flow in ["imports", "exports"]
 
     # 3MMA
     p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PARTNER_ISO => ByRow(x -> x != "EU")) plot(:DATE, :VALUE_3MMA/1e9,
-            group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="euros (billion)", title="Flemish "*flow*": values (3MMA)")
+            group=:PARTNER_ISO, lw=2, legend=:topleft, ylabel="euros (billion)", title="Flemish "*flow*": values (3MMA)")
     vline!([Date(2016,6,23)], label="vote", color=:black, lw=1, ls=:solid) # refer
     vline!([Date(2020,01,31)], label="exit", color=:black, lw=1, ls=:dash) # exit
     vline!([Date(2020,12,31)], label="trans end", color=:black, lw=1.5, ls=:dot) # trans end
     savefig(p, dir_dropbox * "results/images/VLAIO/summary_stats/" * "fig1_" * flow * "_values" * "_3MMA" * ".png") # export image dropbox
+
+    # STD
+    p = @df subset(df, :FLOW => ByRow(x -> x == flow), :PARTNER_ISO => ByRow(x -> x != "EU")) plot(:DATE, :STD_VALUE/1e9,
+            group=:PARTNER_ISO, lw=2, legend=:topleft, ylabel="euros (billion)", title="Flemish "*flow*": 6 months STD \n (values, rolling window)")
+    vline!([Date(2016,6,23)], label="vote", color=:black, lw=1, ls=:solid) # refer
+    vline!([Date(2020,01,31)], label="exit", color=:black, lw=1, ls=:dash) # exit
+    vline!([Date(2020,12,31)], label="trans end", color=:black, lw=1.5, ls=:dot) # trans end
+    savefig(p, dir_dropbox * "results/images/VLAIO/summary_stats/" * "fig4_" * flow * "_values" * "_STD" * ".png") # export image dropbox
+
 
 end
 
 
 # STD
 p = @df subset(df, :PARTNER_ISO => ByRow(x -> x == "Verenigd Koninkrijk")) plot(:DATE, :STD_VALUE/1e9,
-        group=:FLOW, lw=2, legend=:bottomleft, ylabel="euros (billion)", title="Flemish: 6 months STD values")
+        group=:FLOW, lw=2, legend=:bottomleft, ylabel="euros (billion)", title="Flemish: 6 months STD \n (values, rolling window)")
 vline!([Date(2016,6,23)], label="vote", color=:black, lw=1, ls=:solid) # refer
 vline!([Date(2020,01,31)], label="exit", color=:black, lw=1, ls=:dash) # exit
 vline!([Date(2020,12,31)], label="trans end", color=:black, lw=1.5, ls=:dot) # trans end
@@ -224,7 +233,7 @@ end
 
 # prepare data
 df = copy(df_VLAIO)
-partners = ["Verenigd Koninkrijk", "EU", "Duitsland", "Nederland", "Frankrijk", "WORLD"]
+partners = ["Verenigd Koninkrijk", "EU", "Duitsland", "Nederland", "Frankrijk", "WORLD", "Italië"]
 subset!(df, :DECLARANT_ISO => ByRow(x -> x == "Vlaanderen"), :PARTNER_ISO => ByRow(x -> x in partners))
 cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW", "PERIOD"]
 gdf = groupby(df, cols_grouping)
@@ -250,7 +259,7 @@ gdf = groupby(df, cols_grouping)
 df = transform(gdf, :SHARE_VALUE => (x -> HP(x, λ)) => :SHARE_VALUE_HP)
 
 # plotting
-partners = ["Verenigd Koninkrijk", "Duitsland", "Nederland", "Frankrijk"]
+partners = ["Verenigd Koninkrijk", "Duitsland", "Nederland", "Frankrijk", "Italië"]
 
 for flow in ["imports", "exports"]
 
@@ -288,7 +297,7 @@ savefig(p, dir_dropbox * "results/images/VLAIO/summary_stats/" * "fig3_" * "VLA_
 
 # prepare data
 df = copy(df_VLAIO)
-partners = ["Verenigd Koninkrijk", "Duitsland", "Nederland", "Frankrijk"]
+partners = ["Verenigd Koninkrijk", "Duitsland", "Nederland", "Frankrijk", "Italië"]
 subset!(df, :DECLARANT_ISO => ByRow(x -> x == "Vlaanderen"), :PARTNER_ISO => ByRow(x -> x in partners))
 
 cols_grouping = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW", "PERIOD"]
@@ -339,14 +348,6 @@ df_tab1 = subset(df, :PARTNER_ISO => ByRow(x -> x == "Verenigd Koninkrijk"))
 cols_name = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW", "PRODUCT_NC_digits", "YEAR", "SHARE_VALUE"]
 df_tab1 = df_tab1[:, cols_name]
 
-# # only keep top 10
-# df_tab1 = @pipe df_tab1 |>
-#     groupby(_, cols_grouping) |>
-#     combine(_) do sdf
-#         sorted = sort(sdf, order(:SHARE_VALUE, rev=true))
-#         first(sorted, 10)
-#     end
-
 sort!(df_tab1)
 transform!(df_tab1, :SHARE_VALUE => ByRow(x -> round(x*100, digits=2)), renamecols=false)
 df_tab1_wide = unstack(df_tab1, :YEAR, :SHARE_VALUE)
@@ -393,7 +394,7 @@ df_tab2_wide = unstack(df_tab2, :YEAR, :SHARE_VALUE)
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 df = copy(df_VLAIO)
-partners = ["Verenigd Koninkrijk", "EU", "Duitsland", "Nederland", "Frankrijk"]
+partners = ["Verenigd Koninkrijk", "EU", "Duitsland", "Nederland", "Frankrijk", "Italië"]
 subset!(df, :DECLARANT_ISO => ByRow(x -> x == "Vlaanderen"), :PARTNER_ISO => ByRow(x -> x in [partners; "WORLD"]))
 transform!(df, :PRODUCT_NC => ByRow(x -> x[1:2]) => :PRODUCT_NC_digits)
 
@@ -496,7 +497,7 @@ sort!(tab_std_wide, :FLOW)
 # -------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 df = copy(df_VLAIO)
-partners = ["Verenigd Koninkrijk", "Duitsland", "Nederland", "Frankrijk"]
+partners = ["Verenigd Koninkrijk", "Duitsland", "Nederland", "Frankrijk", "Italië"]
 subset!(df, :DECLARANT_ISO => ByRow(x -> x == "Vlaanderen"), :PARTNER_ISO => ByRow(x -> x in partners))
 
 # aggregate over products
@@ -542,10 +543,12 @@ for flow in ["imports", "exports"]
 
     # YOY HP
     p = @df subset(df, :FLOW => ByRow(x -> x == flow)) plot(:DATE, :STD_YOY_HP,
-            group=:PARTNER_ISO, lw=2, legend=:bottomleft, ylabel="percentages", title="Flemish "*flow*" : 6 months STD \n (YOY change, λ=$λ)")
+            group=:PARTNER_ISO, lw=2, legend=:topleft, ylabel="percentages", title="Flemish "*flow*" : 6 months STD \n (YOY change, rolling window, λ=$λ)")
     vline!([Date(2016,6,23)], label="vote", color=:black, lw=1, ls=:solid) # refer
     vline!([Date(2020,01,31)], label="exit", color=:black, lw=1, ls=:dash) # exit
     vline!([Date(2020,12,31)], label="trans end", color=:black, lw=1.5, ls=:dot) # trans end
     savefig(p, dir_dropbox * "results/images/VLAIO/summary_stats/" * "fig7_" * flow * "_YOY" * "_STD" * ".png") # export image dropbox
 
 end
+
+

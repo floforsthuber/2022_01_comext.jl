@@ -32,7 +32,7 @@ transform!(df_VLAIO, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] => ByRow((v,q) -> v/q) =
 gdf = groupby(df_VLAIO, "PRODUCT_NC")
 df_VLAIO = transform(gdf, :UNIT_PRICE => MAD_method => :MAD)
 subset!(df_VLAIO, :MAD => ByRow(x -> x < outlier_cutoff)) # lose further 1-13110297/16027346 ~18% observations (~40% of total)
-df_VLAIO = df_VLAIO[:, Not(:MAD)]
+df_VLAIO = df_VLAIO[:, Not([:MAD, :UNIT_PRICE])]
 
 # add EU/WORLD again
 EU27 = ["Roemenië", "Griekenland", "Oostenrijk", "Polen", "Duitsland", "Spanje", "Hongarije", "Slovakije", "Italië", "Nederland",
@@ -71,13 +71,14 @@ function append_EU(df::DataFrame, EU::Vector{String})
     return df
 end
 
-# df_VLAIO = append_WORLD(df_VLAIO)
-# df_VLAIO = append_EU(df_VLAIO, EU27)
+df_VLAIO = append_WORLD(df_VLAIO)
+df_VLAIO = append_EU(df_VLAIO, EU27)
 
 # double check if no zeros/missing introduced by WORLD/EU
 transform!(df_VLAIO, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] .=> ByRow(x -> ifelse(iszero(x) | ismissing(x), missing, x)), renamecols=false)
 subset!(df_VLAIO, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] .=> ByRow(x -> !ismissing(x))) # lose 1-15228494/15228494 ~0% observations
 
+transform!(df_VLAIO, [:VALUE_IN_EUROS, :QUANTITY_IN_KG] => ByRow((v,q) -> v/q) => :UNIT_PRICE)
 cols_subset = ["DECLARANT_ISO", "PARTNER_ISO", "FLOW", "PERIOD", "PRODUCT_NC", "VALUE_IN_EUROS", "QUANTITY_IN_KG", "UNIT_PRICE"]
 df_VLAIO = df_VLAIO[:, cols_subset]
 sort!(df_VLAIO, :PERIOD)
@@ -170,17 +171,17 @@ end
 # ------------
 # play with some partners
 
-eurozone = ["Griekenland", "Oostenrijk", "Duitsland", "Spanje", "Slovakije", "Italië", "Nederland", "Frankrijk", "Letland", "Cyprus", "Malta", "Litouwen",
-            "Slovenië", "Estland", "Portugal", "Finland", "Luxemburg", "Ierland", "België"]
-not_eurozone = ["Roemenië", "Polen", "Hongarije", "Kroatië", "Tsjechië", "Zweden", "Denemarken", "Bulgarije"]
-not_EU = ["Verenigde Staten", "Canada", "China", "Zwitserland", "Noorwegen", "Rusland"]
+# eurozone = ["Griekenland", "Oostenrijk", "Duitsland", "Spanje", "Slovakije", "Italië", "Nederland", "Frankrijk", "Letland", "Cyprus", "Malta", "Litouwen",
+#             "Slovenië", "Estland", "Portugal", "Finland", "Luxemburg", "Ierland", "België"]
+# not_eurozone = ["Roemenië", "Polen", "Hongarije", "Kroatië", "Tsjechië", "Zweden", "Denemarken", "Bulgarije"]
+# not_EU = ["Verenigde Staten", "Canada", "China", "Zwitserland", "Noorwegen", "Rusland"]
 
-partners = ["Nederland", "Duitsland", "Frankrijk"]
+# partners = ["Nederland", "Duitsland", "Frankrijk"]
 partners = ["Nederland", "Duitsland", "Frankrijk", "Italië"]
-partners = ["Nederland", "Duitsland", "Frankrijk", "Italië", "Verenigde Staten"]
-partners = copy(EU27)
-partners = copy(eurozone)
-partners = ["Nederland", "Duitsland", "Frankrijk", "Denemarken", "Verenigde Staten"]
+# partners = ["Nederland", "Duitsland", "Frankrijk", "Italië", "Verenigde Staten"]
+# partners = copy(EU27)
+# partners = copy(eurozone)
+# partners = ["Nederland", "Duitsland", "Frankrijk", "Denemarken", "Verenigde Staten"]
 
 # ------------
 # Setup
@@ -203,9 +204,20 @@ interval = 12 # 12 months before and after brexit scenarios
 # interval = 12 # 12 months before and after brexit scenarios
 
 
-prod_exports = common_products(df, treated, control, brexit_dates, flow, interval)
+prod_common = common_products(df, treated, control, brexit_dates, flow, interval)
 
-df_reg, df_reg_std = data_reg(df, treated, control, referendum, flow, interval, prod_exports)
+df_reg, df_reg_std = data_reg(df, treated, control, referendum, flow, interval, prod_common)
+
+
+# regression figures
+include(dir_home * "event_study/" * "functions_figures.jl")
+df_fig, folder = figures_reg(df_VLAIO, treated, control, brexit_dates, interval, prod_common) # use df_VLAIO to extend time period
+figure_1(df_fig, folder, treated)
+figure_3(df_fig, folder, treated)
+figure_5(df_fig, folder)
+figure_7(df_fig, folder)
+table_3(df_fig, folder, brexit_dates)
+
 
 
 # ------------
